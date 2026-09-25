@@ -1,0 +1,29 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateAlunoDto } from './dto/create-aluno.dto';
+import { UpdateAlunoDto } from './dto/update-aluno.dto';
+
+@Injectable()
+export class AlunosService {
+  constructor(private prisma: PrismaService) {}
+
+  create(createAlunoDto: CreateAlunoDto) {
+    return this.prisma.aluno.create({ data: createAlunoDto });
+  }
+
+  findAll() {
+    return this.prisma.aluno.findMany();
+  }
+
+  findOne(id: number) {
+    return this.prisma.aluno.findUnique({ where: { id } });
+  }
+
+  update(id: number, updateAlunoDto: UpdateAlunoDto) {
+    return this.prisma.aluno.update({ where: { id }, data: updateAlunoDto });
+  }
+
+  remove(id: number) {
+    return this.prisma.aluno.delete({ where: { id } });
+  }
+}
