@@ -8,8 +8,8 @@ Aplicação web para gestão de aulas particulares — cadastro de professores e
 
 ## Aplicação online
 
-- Frontend: [link] <!-- substituir depois do deploy -->
-- Backend/API: [link] <!-- substituir depois do deploy -->
+- Frontend: https://classboard-three.vercel.app
+- Backend/API: https://classboard-production-834b.up.railway.app
 
 ## Tecnologias
 
