@@ -25,7 +25,7 @@ Aplicação web para gestão de aulas particulares — cadastro de professores e
 - CRUD de Aulas (data/hora, duração, status, vínculo com professor e aluno)
 - Atualização de status da aula (agendada, concluída, cancelada)
 
-## Como rodar localmente
+
 
 ### Pré-requisitos
 - Node.js 18+
@@ -38,7 +38,7 @@ cd backend
 npm install
 \`\`\`
 
-Crie um arquivo `.env` na pasta `backend` com:
+Arquivo `.env` na pasta `backend` com:
 \`\`\`
 DATABASE_URL="sua-connection-string-do-postgresql"
 \`\`\`
@@ -49,7 +49,7 @@ npx prisma migrate dev
 npm run start:dev
 \`\`\`
 
-A API estará disponível em `http://localhost:3000`.
+A API esta disponível em `http://localhost:3000`.
 
 ### Frontend
 
@@ -59,7 +59,7 @@ npm install
 npm run dev -- -p 3001
 \`\`\`
 
-A aplicação estará disponível em `http://localhost:3001`.
+A aplicação esta disponível em `http://localhost:3001`.
 
 ## Estrutura do projeto
 
