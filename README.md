@@ -2,9 +2,7 @@
 
 Aplicação web para gestão de aulas particulares — cadastro de professores e alunos, agendamento de aulas e acompanhamento de status.
 
-## Vídeo de apresentação
-
-[Link do vídeo no YouTube](#) <!-- substituir pelo link real -->
+[Assista no YouTube](https://youtu.be/czkJsVWd9aw)
 
 ## Aplicação online
 
