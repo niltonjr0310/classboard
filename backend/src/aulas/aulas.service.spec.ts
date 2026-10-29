@@ -127,6 +127,39 @@ describe('AulasService', () => {
       expect(email.enviar).not.toHaveBeenCalled();
     });
 
+    it('avisa aluno e professor quando a data/hora muda', async () => {
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue({ ...aulaBase, dataHora: new Date('2026-11-12T18:00:00Z') });
+      await service.update(1, { dataHora: '2026-11-12T18:00:00Z' }, 1);
+      expect(notificacoes.criar).toHaveBeenCalledTimes(2);
+      expect(notificacoes.criar.mock.calls[0][2]).toBe('Aula remarcada');
+      const mensagem = notificacoes.criar.mock.calls[0][3] as string;
+      expect(mensagem).toContain('10/11/2026');
+      expect(mensagem).toContain('12/11/2026');
+      expect(email.enviar).toHaveBeenCalledTimes(2);
+      expect(email.enviar.mock.calls[0][1]).toContain('remarcada');
+    });
+
+    it('não avisa de remarcação se a data/hora continua a mesma', async () => {
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue(aulaBase);
+      await service.update(1, { dataHora: '2026-11-10T17:00:00Z', duracao: 45 }, 1);
+      expect(notificacoes.criar).not.toHaveBeenCalled();
+      expect(email.enviar).not.toHaveBeenCalled();
+    });
+
+    it('se cancela e muda a data juntos, avisa só do cancelamento', async () => {
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue({
+        ...aulaBase,
+        status: 'cancelada',
+        dataHora: new Date('2026-11-12T18:00:00Z'),
+      });
+      await service.update(1, { status: 'cancelada', dataHora: '2026-11-12T18:00:00Z' }, 1);
+      expect(notificacoes.criar).toHaveBeenCalledTimes(2);
+      expect(notificacoes.criar.mock.calls[0][2]).toBe('Aula cancelada');
+    });
+
     it('nunca deixa mudar a escola da aula', async () => {
       prisma.aula.findFirst.mockResolvedValue(aulaBase);
       prisma.aula.update.mockResolvedValue(aulaBase);

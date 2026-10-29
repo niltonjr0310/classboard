@@ -212,6 +212,54 @@ export class AulasService {
       ]);
     }
 
+    // Remarcada: mudou a data/hora e a aula não está cancelada (cancelamento já avisa por si).
+    const mudouHorario =
+      !virouCancelada &&
+      aula.status !== 'cancelada' &&
+      dto.dataHora !== undefined &&
+      aula.dataHora.getTime() !== aulaAnterior.dataHora.getTime();
+
+    if (mudouHorario) {
+      const { tipo, tipoCap, deMateria, data: dataNova } = descrever(aula);
+      const dataAntiga = descrever(aulaAnterior).data;
+      const materia = esc(deMateria);
+      const escola = aula.escola;
+      const assunto = `${tipoCap} remarcada — ${escola.nome}`;
+
+      await Promise.all([
+        this.notificacoesService.criar(
+          'ALUNO',
+          aula.alunoId,
+          `${tipoCap} remarcada`,
+          `Sua ${tipo}${deMateria} com o professor ${aula.professor.nome} foi remarcada de ${dataAntiga} para ${dataNova}.`,
+        ),
+        this.notificacoesService.criar(
+          'PROFESSOR',
+          aula.professorId,
+          `${tipoCap} remarcada`,
+          `Sua ${tipo}${deMateria} com o aluno ${aula.aluno.nome} foi remarcada de ${dataAntiga} para ${dataNova}.`,
+        ),
+        this.emailService.enviar(
+          aula.aluno.email,
+          assunto,
+          emailHtml(
+            escola,
+            `<p>Olá, ${esc(aula.aluno.nome)}.</p><p>Sua ${tipo}${materia} com o professor <strong>${esc(aula.professor.nome)}</strong> foi <strong>remarcada</strong>.</p><p>De: ${dataAntiga}<br>Para: <strong>${dataNova}</strong></p>`,
+          ),
+          escola.nome,
+        ),
+        this.emailService.enviar(
+          aula.professor.email,
+          assunto,
+          emailHtml(
+            escola,
+            `<p>Olá, ${esc(aula.professor.nome)}.</p><p>Sua ${tipo}${materia} com o aluno <strong>${esc(aula.aluno.nome)}</strong> foi <strong>remarcada</strong>.</p><p>De: ${dataAntiga}<br>Para: <strong>${dataNova}</strong></p>`,
+          ),
+          escola.nome,
+        ),
+      ]);
+    }
+
     return aula;
   }
 
