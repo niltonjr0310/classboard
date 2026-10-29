@@ -11,6 +11,10 @@ export class EmailService {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_APP_PASSWORD,
     },
+    // Evita que uma conexão SMTP bloqueada deixe a requisição pendurada.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
   async enviar(to: string, subject: string, html: string, remetente = 'ClassBoard') {
@@ -21,15 +25,14 @@ export class EmailService {
       return;
     }
 
-    try {
-      await this.transporter.sendMail({
+    // Envio em segundo plano: a aula é salva sem esperar o e-mail.
+    void this.transporter
+      .sendMail({
         from: `${remetente.replace(/[<>"\r\n]/g, '')} <${process.env.GMAIL_USER}>`,
         to,
         subject,
         html,
-      });
-    } catch (err) {
-      this.logger.error('Erro ao enviar e-mail', err as Error);
-    }
+      })
+      .catch((err: Error) => this.logger.error('Erro ao enviar e-mail', err));
   }
 }
