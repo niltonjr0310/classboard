@@ -6,10 +6,16 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from './auth-user';
+import { garantirUsuarioAtivo } from './usuario-ativo';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -21,12 +27,15 @@ export class JwtAuthGuard implements CanActivate {
 
     const token = authHeader.slice('Bearer '.length);
 
+    let payload: AuthUser;
     try {
-      const payload = await this.jwtService.verifyAsync(token);
-      (request as Request & { user: unknown }).user = payload;
-      return true;
+      payload = await this.jwtService.verifyAsync<AuthUser>(token);
     } catch {
       throw new UnauthorizedException('Token inválido ou expirado.');
     }
+
+    await garantirUsuarioAtivo(this.prisma, payload);
+    (request as Request & { user: AuthUser }).user = payload;
+    return true;
   }
 }

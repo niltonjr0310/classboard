@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, ParseIntPipe, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { NotificacoesService } from './notificacoes.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,9 +24,9 @@ export class NotificacoesController {
   }
 
   @Patch(':id/lida')
-  async marcarLida(@Param('id') id: string, @Req() req: RequestComUsuario) {
+  async marcarLida(@Param('id', ParseIntPipe) id: number, @Req() req: RequestComUsuario) {
     if (req.user.role === 'ADMIN') return { count: 0 };
-    return this.notificacoesService.marcarLida(+id, req.user.role, req.user.sub);
+    return this.notificacoesService.marcarLida(id, req.user.role, req.user.sub);
   }
 
   @Patch('todas/lidas')

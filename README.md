@@ -1,73 +1,37 @@
 # ClassBoard
 
-Aplicação web para gestão de aulas particulares — cadastro de professores e alunos, agendamento de aulas e acompanhamento de status.
+Sistema web para escolas agendarem **reforço individual** (aulas e provas): cadastro de professores, alunos e turmas, agendamento com aviso por e-mail e notificação, e relatórios.
 
-[Assista no YouTube](https://youtu.be/czkJsVWd9aw)
+- Site: https://classboard-three.vercel.app
+- Tecnologias: Next.js (Vercel), NestJS + Prisma (Render), PostgreSQL (Neon), login com Google, e-mails pelo Brevo.
 
-## Aplicação online
+## Perfis
+- **Dono do sistema** (e-mails em `ADMIN_EMAILS`): cadastra escolas e seus administradores.
+- **Administrador da escola:** professores, alunos, turmas, aulas, relatórios e a marca da escola.
+- **Professor / Aluno:** veem as próprias aulas e notificações.
 
-- Frontend: https://classboard-three.vercel.app
-- Backend/API: https://classboard-production-834b.up.railway.app
+O login é só com a conta Google, e apenas e-mails cadastrados pela escola entram.
 
-## Tecnologias
+## Rodar localmente
+Requisitos: Node 24.9 ou mais novo e um banco PostgreSQL (ex.: Neon).
 
-- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
-- **Backend:** NestJS, TypeScript
-- **Banco de dados:** PostgreSQL (Neon)
-- **ORM:** Prisma
-
-## Funcionalidades
-
-- CRUD de Professores (nome, email, disciplina)
-- CRUD de Alunos (nome, email, série)
-- CRUD de Aulas (data/hora, duração, status, vínculo com professor e aluno)
-- Atualização de status da aula (agendada, concluída, cancelada)
-
-
-
-### Pré-requisitos
-- Node.js 18+
-- Uma conta gratuita no [Neon](https://neon.tech) (ou outro PostgreSQL)
-
-### Backend
-
-\`\`\`bash
+```bash
 cd backend
 npm install
-\`\`\`
-
-Arquivo `.env` na pasta `backend` com:
-\`\`\`
-DATABASE_URL="sua-connection-string-do-postgresql"
-\`\`\`
-
-Rode as migrations e inicie o servidor:
-\`\`\`bash
+# backend/.env: DATABASE_URL, GOOGLE_CLIENT_ID, JWT_SECRET, ADMIN_EMAILS (modelo em env.example.yaml)
 npx prisma migrate dev
-npm run start:dev
-\`\`\`
+npm run start:dev        # http://localhost:3000
 
-A API esta disponível em `http://localhost:3000`.
-
-### Frontend
-
-\`\`\`bash
-cd frontend
+cd ../frontend
 npm install
-npm run dev -- -p 3001
-\`\`\`
+# frontend/.env.local: NEXT_PUBLIC_API_URL=http://localhost:3000 e NEXT_PUBLIC_GOOGLE_CLIENT_ID
+npm run dev -- -p 3001   # http://localhost:3001
+```
 
-A aplicação esta disponível em `http://localhost:3001`.
+Testes do backend: `cd backend && npm test`.
 
-## Estrutura do projeto
-
-\`\`\`
-classboard/
-├── backend/    # API NestJS + Prisma
-├── frontend/   # Interface Next.js
-└── README.md
-\`\`\`
+## Publicar
+Veja [docs/DEPLOY.md](docs/DEPLOY.md). Backup do banco: [docs/BACKUP.md](docs/BACKUP.md).
 
 ## Autor
-
-Nilton Vezaro Junior — UNOESC, Programação IV
+Nilton Vezaro Junior — NV T.I

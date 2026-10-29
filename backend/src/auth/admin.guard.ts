@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from './auth-user';
+import { garantirUsuarioAtivo } from './usuario-ativo';
 
 /**
  * Deixa passar admin de escola (ADMIN) e dono do sistema (SUPERADMIN).
@@ -43,6 +44,8 @@ export class AdminGuard implements CanActivate {
     if (payload.role !== 'ADMIN' && payload.role !== 'SUPERADMIN') {
       throw new ForbiddenException('Apenas administradores podem realizar essa ação.');
     }
+
+    await garantirUsuarioAtivo(this.prisma, payload);
 
     let escolaId = payload.escolaId;
 

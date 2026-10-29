@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { TurmasService } from './turmas.service';
 import { AdminGuard } from '../auth/admin.guard';
+import { NomeTurmaDto } from './dto/nome-turma.dto';
 import { EscolaAtual } from '../auth/auth-user';
 
 @UseGuards(AdminGuard)
@@ -14,14 +15,14 @@ export class TurmasController {
   }
 
   @Post()
-  create(@Body() body: { nome: string }, @EscolaAtual() escolaId: number) {
+  create(@Body() body: NomeTurmaDto, @EscolaAtual() escolaId: number) {
     return this.turmasService.create(body.nome, escolaId);
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { nome: string },
+    @Body() body: NomeTurmaDto,
     @EscolaAtual() escolaId: number,
   ) {
     return this.turmasService.update(id, body.nome, escolaId);

@@ -16,6 +16,7 @@ import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, EscolaAtual } from '../auth/auth-user';
+import { AtualizarEscolaDto, CriarEscolaDto, NovoAdminDto } from './dto/escola.dto';
 
 @Controller('escolas')
 export class EscolasController {
@@ -34,7 +35,7 @@ export class EscolasController {
   @Patch('minha')
   atualizarMinha(
     @EscolaAtual() escolaId: number,
-    @Body() body: { nome?: string; logoUrl?: string | null },
+    @Body() body: AtualizarEscolaDto,
   ) {
     return this.escolasService.update(escolaId, body);
   }
@@ -49,13 +50,13 @@ export class EscolasController {
 
   @UseGuards(SuperAdminGuard)
   @Post()
-  create(@Body() body: { nome?: string; logoUrl?: string; adminEmail?: string; adminNome?: string }) {
+  create(@Body() body: CriarEscolaDto) {
     return this.escolasService.create(body);
   }
 
   @UseGuards(SuperAdminGuard)
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() body: { nome?: string; logoUrl?: string | null }) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() body: AtualizarEscolaDto) {
     return this.escolasService.update(id, body);
   }
 
@@ -73,7 +74,7 @@ export class EscolasController {
 
   @UseGuards(SuperAdminGuard)
   @Post(':id/admins')
-  addAdmin(@Param('id', ParseIntPipe) id: number, @Body() body: { nome?: string; email?: string }) {
+  addAdmin(@Param('id', ParseIntPipe) id: number, @Body() body: NovoAdminDto) {
     return this.escolasService.addAdmin(id, body);
   }
 

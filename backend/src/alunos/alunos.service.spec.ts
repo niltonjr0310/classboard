@@ -1,12 +1,14 @@
 jest.mock('../prisma/prisma.service', () => ({ PrismaService: class {} }));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AlunosService } from './alunos.service';
 
 describe('AlunosService (por escola)', () => {
   const prisma = {
     aluno: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
     turma: { findFirst: jest.fn() },
+    admin: { findFirst: jest.fn() },
+    professor: { findFirst: jest.fn() },
   };
   const service = new AlunosService(prisma as any);
 
@@ -42,5 +44,32 @@ describe('AlunosService (por escola)', () => {
     prisma.aluno.findFirst.mockResolvedValue({ id: 1 });
     await service.update(1, { turmaId: null }, 3);
     expect(prisma.aluno.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { turmaId: null } });
+  });
+
+  it('guarda o e-mail em minúsculas', async () => {
+    await service.create({ nome: 'A', email: ' Ana@Escola.COM ', serie: '1' } as any, 3);
+    expect(prisma.aluno.create.mock.calls[0][0].data.email).toBe('ana@escola.com');
+  });
+
+  it('recusa e-mail que já é de um professor', async () => {
+    prisma.professor.findFirst.mockResolvedValue({ id: 5 });
+    await expect(service.create({ nome: 'A', email: 'prof@escola.com', serie: '1' } as any, 3)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.aluno.create).not.toHaveBeenCalled();
+  });
+
+  it('ao editar, ignora o próprio aluno na checagem de e-mail repetido', async () => {
+    prisma.aluno.findFirst.mockResolvedValueOnce({ id: 1 }); // só a busca do próprio registro
+    await service.update(1, { email: 'mesmo@escola.com' }, 3);
+    const where = prisma.aluno.findFirst.mock.calls[1][0].where;
+    expect(where.id).toEqual({ not: 1 });
+  });
+
+  it('traduz e-mail repetido do banco (P2002) em 409', async () => {
+    prisma.aluno.create.mockRejectedValue({ code: 'P2002' });
+    await expect(service.create({ nome: 'A', email: 'a@a.com', serie: '1' } as any, 3)).rejects.toThrow(
+      ConflictException,
+    );
   });
 });

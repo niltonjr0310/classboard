@@ -8,7 +8,7 @@ export default function Page() {
   return (
     <article className="mx-auto max-w-3xl px-6 py-10 text-slate-700 dark:text-slate-300 [&_h2]:mt-8 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 dark:[&_h2]:text-white [&_p]:mb-3 [&_p]:leading-relaxed [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_li]:mb-1">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Política de Privacidade</h1>
-      <p className="mt-1 text-sm text-slate-500">Última atualização: 27/10/2026</p>
+      <p className="mt-1 text-sm text-slate-500">Última atualização: 29/10/2026</p>
 
       <p className="mt-4">Esta política explica como o ClassBoard trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).</p>
 
@@ -38,10 +38,11 @@ export default function Page() {
       <h2>5. Com quem compartilhamos</h2>
       <p>Apenas com prestadores necessários para o sistema funcionar:</p>
       <ul>
-        <li>Google (login e envio de e-mails);</li>
+        <li>Google (login com a conta Google);</li>
         <li>Vercel (hospedagem do site);</li>
-        <li>Railway (hospedagem do servidor);</li>
-        <li>Neon (banco de dados).</li>
+        <li>Render (hospedagem do servidor/API);</li>
+        <li>Neon (banco de dados);</li>
+        <li>Brevo (envio dos e-mails de aviso de aulas e provas).</li>
       </ul>
       <p>Alguns desses prestadores armazenam dados fora do Brasil, com salvaguardas contratuais próprias.</p>
 

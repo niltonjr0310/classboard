@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { garantirEmailLivre } from '../auth/email-livre';
 
 export type DadosEscola = { nome?: string; logoUrl?: string | null };
 
@@ -38,7 +39,7 @@ export class EscolasService {
     const logoUrl = validarLogo(dados.logoUrl);
     const adminEmail = limpar(dados.adminEmail).toLowerCase();
 
-    if (adminEmail) await this.garantirEmailLivre(adminEmail);
+    if (adminEmail) await garantirEmailLivre(this.prisma, adminEmail);
 
     return this.prisma.escola.create({
       data: {
@@ -96,7 +97,7 @@ export class EscolasService {
     if (!email || !email.includes('@')) throw new BadRequestException('Informe um e-mail válido.');
     const escola = await this.prisma.escola.findUnique({ where: { id: escolaId } });
     if (!escola) throw new NotFoundException('Escola não encontrada.');
-    await this.garantirEmailLivre(email);
+    await garantirEmailLivre(this.prisma, email);
     return this.prisma.admin.create({
       data: { escolaId, email, nome: limpar(dados.nome) || email },
     });
@@ -106,18 +107,5 @@ export class EscolasService {
     const resultado = await this.prisma.admin.deleteMany({ where: { id: adminId, escolaId } });
     if (resultado.count === 0) throw new NotFoundException('Administrador não encontrado.');
     return { ok: true };
-  }
-
-  /** O mesmo e-mail não pode ser admin, professor e aluno ao mesmo tempo (o login ficaria ambíguo). */
-  private async garantirEmailLivre(email: string) {
-    const igual = { equals: email, mode: 'insensitive' as const };
-    const [admin, professor, aluno] = await Promise.all([
-      this.prisma.admin.findFirst({ where: { email: igual } }),
-      this.prisma.professor.findFirst({ where: { email: igual } }),
-      this.prisma.aluno.findFirst({ where: { email: igual } }),
-    ]);
-    if (admin || professor || aluno) {
-      throw new ConflictException('Esse e-mail já está cadastrado no ClassBoard.');
-    }
   }
 }

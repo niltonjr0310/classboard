@@ -1,37 +1,39 @@
 # Deploy — ClassBoard
 
-Front: Vercel · Backend: Google Cloud Run · Banco: Neon (projeto separado para produção).
+Site: Vercel · API: Render (Docker) · Banco: Neon · E-mails: Brevo · Login: Google.
 
-## 1. Banco de produção (Neon)
-1. Crie um projeto novo no Neon (ex.: `classboard-prod`), separado do banco de testes.
-2. Copie duas URLs: a **direta** (para migrations) e a **pooled** (`-pooler`, para o app).
-3. Aplicar as migrations (PowerShell, pasta `backend`):
+## 1. Banco (Neon)
+1. Projeto separado para produção (ex.: `classboard-prod`).
+2. Duas URLs: a **direta** (migrations) e a **pooled** (`-pooler`, usada pelo app).
+3. Migrations (PowerShell, pasta `backend`):
    ```
    $env:DATABASE_URL = "<URL-DIRETA>"
    npx prisma migrate deploy
    ```
-   Isso cria as tabelas e a escola "Colégio Auxiliadora".
 
-## 2. Variáveis do backend
-Copie `backend/env.example.yaml` para `backend/env.yaml` e preencha (use a URL **pooled**; o JWT_SECRET é um segredo novo: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
+## 2. API (Render)
+New + → Web Service → repositório do GitHub →
+- **Language:** Docker · **Root Directory:** `backend` · **Branch:** `main` · **Instance:** Free (ou pago)
+- **Environment:** `DATABASE_URL` (pooled), `GOOGLE_CLIENT_ID`, `JWT_SECRET`, `ADMIN_EMAILS`, `BREVO_API_KEY`, `EMAIL_FROM`
+  (modelo em `backend/env.example.yaml`; `JWT_SECRET`: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
 
-## 3. Cloud Run
-Uma vez: instalar o Google Cloud CLI, `gcloud auth login`, `gcloud config set project SEU-PROJETO`, ativar o faturamento no projeto e criar um alerta de orçamento.
+O Render gratuito dorme após ~15 min sem uso (primeiro acesso demora ~1 min) e **bloqueia SMTP**: por isso os e-mails saem pela API do Brevo.
+Para manter acordado, use um monitor (UptimeRobot etc.) acessando `https://SUA-API.onrender.com/` a cada 5 min — ou um plano pago.
 
-Na pasta `backend`:
-```
-gcloud run deploy classboard-api --source . --region us-central1 --allow-unauthenticated --env-vars-file env.yaml --max-instances 3
-```
-O comando termina mostrando a URL do serviço (`https://classboard-api-xxxx.run.app`). Teste abrindo `<URL>/` no navegador.
+## 3. E-mails (Brevo)
+Conta grátis (300/dia) → Remetentes: adicionar e **verificar** o e-mail usado em `EMAIL_FROM` → Chaves de API: criar com permissão só de **E-mails transacionais** → `BREVO_API_KEY`.
+Para não cair no spam, autentique um domínio próprio no Brevo e use um remetente desse domínio.
 
-## 4. Google (login)
-Google Cloud Console → APIs e serviços → Credenciais → seu Client ID → **Origens JavaScript autorizadas**: adicione a URL do site na Vercel (ex.: `https://classboard-three.vercel.app`).
+## 4. Login (Google)
+Google Cloud Console → APIs e serviços → Credenciais → seu Client ID → **Origens JavaScript autorizadas**: URL do site (ex.: `https://classboard-three.vercel.app`) e `http://localhost:3001` para testes locais.
 
-## 5. Vercel (front)
-Settings → Environment Variables:
-- `NEXT_PUBLIC_API_URL` = URL do Cloud Run (sem barra no final)
+## 5. Site (Vercel)
+Settings → Environment Variables (tipo **Config**; `NEXT_PUBLIC_*` não pode ser Secret):
+- `NEXT_PUBLIC_API_URL` = URL da API no Render (sem barra no final)
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` = o mesmo Client ID
 Depois, Redeploy (as variáveis `NEXT_PUBLIC_*` entram no build).
+O plano Hobby da Vercel é só para uso não comercial: ao cobrar, use um plano pago.
 
 ## Atualizar depois
-Backend: repetir o comando do passo 3. Front: `git push`. Mudou o banco? `prisma migrate deploy` (passo 1) **antes** de subir o backend novo.
+`git push` atualiza o site (Vercel) e a API (Render) sozinhos. Mudou o banco? Rode `prisma migrate deploy` (passo 1) **antes** do push.
+Mudou dependências do backend? Rode `npm install` na pasta `backend` e envie `package.json` e `package-lock.json` juntos (o build usa `npm ci`).

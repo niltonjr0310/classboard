@@ -8,6 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { AuthUser } from './auth-user';
+import { emailsDoDono } from './email-livre';
 
 /** Só o dono do sistema (e-mails em ADMIN_EMAILS). Usado para gerenciar escolas. */
 @Injectable()
@@ -31,6 +32,9 @@ export class SuperAdminGuard implements CanActivate {
 
     if (payload.role !== 'SUPERADMIN') {
       throw new ForbiddenException('Apenas o dono do sistema pode fazer isso.');
+    }
+    if (!emailsDoDono().includes((payload.email ?? '').toLowerCase())) {
+      throw new UnauthorizedException('Seu acesso foi removido.');
     }
 
     (request as Request & { user: AuthUser }).user = payload;
