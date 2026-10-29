@@ -5,7 +5,18 @@ import { useSomenteAdmin } from "../hooks/useBloquearAluno";
 import { API_URL, authHeaders } from "../lib/api";
 
 type Professor = { id: number; nome: string; disciplina?: string };
-type Aluno = { id: number; nome: string };
+type Aluno = { id: number; nome: string; turma?: { id: number; nome: string } | null };
+type Turma = { id: number; nome: string };
+
+const CAMPO =
+  "rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800";
+
+// ISO -> valor do <input type="datetime-local"> no horário local do navegador
+function paraInput(iso: string) {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 type Aula = {
   id: number;
   dataHora: string;
@@ -65,20 +76,40 @@ export default function AulasPage() {
   const [alunoId, setAlunoId] = useState("");
   const [tipo, setTipo] = useState("aula");
   const [materia, setMateria] = useState("");
+  const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  // filtros da lista
+  const [fDia, setFDia] = useState("");
+  const [fTipo, setFTipo] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [fProfessor, setFProfessor] = useState("");
+  const [fTurma, setFTurma] = useState("");
+
+  // edição (remarcar)
+  const [editId, setEditId] = useState<number | null>(null);
+  const [eDataHora, setEDataHora] = useState("");
+  const [eDuracao, setEDuracao] = useState(60);
+  const [eTipo, setETipo] = useState("aula");
+  const [eMateria, setEMateria] = useState("");
+  const [eProfessorId, setEProfessorId] = useState("");
+  const [eAlunoId, setEAlunoId] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
   async function carregar() {
     try {
-      const [aulasRes, profRes, alunosRes] = await Promise.all([
+      const [aulasRes, profRes, alunosRes, turmasRes] = await Promise.all([
         fetch(`${API_URL}/aulas`, { headers: authHeaders() }),
         fetch(`${API_URL}/professores`, { headers: authHeaders() }),
         fetch(`${API_URL}/alunos`, { headers: authHeaders() }),
+        fetch(`${API_URL}/turmas`, { headers: authHeaders() }),
       ]);
       setAulas(aulasRes.ok ? await aulasRes.json() : []);
       setProfessores(profRes.ok ? await profRes.json() : []);
       setAlunos(alunosRes.ok ? await alunosRes.json() : []);
+      setTurmas(turmasRes.ok ? await turmasRes.json() : []);
     } catch {
       setFeedback("Não foi possível carregar os dados. Tente novamente.");
     } finally {
@@ -132,6 +163,44 @@ export default function AulasPage() {
     }
   }
 
+  function iniciarEdicao(aula: Aula) {
+    setEditId(aula.id);
+    setEDataHora(paraInput(aula.dataHora));
+    setEDuracao(aula.duracao);
+    setETipo(aula.tipo === "prova" ? "prova" : "aula");
+    setEMateria(aula.materia ?? "");
+    setEProfessorId(String(aula.professor.id));
+    setEAlunoId(String(aula.aluno.id));
+  }
+
+  async function salvarEdicao(e: React.FormEvent) {
+    e.preventDefault();
+    if (editId === null) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/aulas/${editId}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          dataHora: new Date(eDataHora).toISOString(),
+          duracao: Number(eDuracao),
+          tipo: eTipo,
+          materia: eMateria.trim(),
+          professorId: Number(eProfessorId),
+          alunoId: Number(eAlunoId),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setFeedback("Aula atualizada.");
+      setEditId(null);
+      await carregar();
+    } catch {
+      setFeedback("Não foi possível salvar as alterações.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function handleStatusChange(id: number, status: string) {
     await fetch(`${API_URL}/aulas/${id}`, {
       method: "PATCH",
@@ -158,7 +227,16 @@ export default function AulasPage() {
   const hoje = diaChave(new Date());
   const amanha = diaChave(new Date(Date.now() + 86400000));
   const porDia = new Map<string, Aula[]>();
-  for (const aula of aulas) {
+  const filtrando = Boolean(fDia || fTipo || fStatus || fProfessor || fTurma);
+  const aulasFiltradas = aulas.filter(
+    (a) =>
+      (!fTipo || a.tipo === fTipo) &&
+      (!fStatus || a.status === fStatus) &&
+      (!fProfessor || String(a.professor.id) === fProfessor) &&
+      (!fTurma || String(a.aluno.turma?.id) === fTurma) &&
+      (!fDia || diaChave(new Date(a.dataHora)) === fDia),
+  );
+  for (const aula of aulasFiltradas) {
     const k = diaChave(new Date(aula.dataHora));
     porDia.set(k, [...(porDia.get(k) ?? []), aula]);
   }
@@ -177,7 +255,11 @@ export default function AulasPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Aulas</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {loading ? "Carregando..." : `${aulas.length} agendada(s)`}
+            {loading
+              ? "Carregando..."
+              : filtrando
+                ? `${aulasFiltradas.length} de ${aulas.length}`
+                : `${aulas.length} agendada(s)`}
           </p>
         </div>
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-lg">
@@ -281,6 +363,63 @@ export default function AulasPage() {
         <EmptyState label="Nenhuma aula ou prova agendada ainda." />
       ) : (
         <div className="flex flex-col gap-8">
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900">
+            <input
+              className={CAMPO}
+              type="date"
+              value={fDia}
+              onChange={(e) => setFDia(e.target.value)}
+              aria-label="Filtrar por dia"
+            />
+            <select className={CAMPO} value={fTipo} onChange={(e) => setFTipo(e.target.value)}>
+              <option value="">Aulas e provas</option>
+              <option value="aula">Só aulas</option>
+              <option value="prova">Só provas</option>
+            </select>
+            <select className={CAMPO} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
+              <option value="">Todos os status</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={CAMPO}
+              value={fProfessor}
+              onChange={(e) => setFProfessor(e.target.value)}
+            >
+              <option value="">Todos os professores</option>
+              {professores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+            <select className={CAMPO} value={fTurma} onChange={(e) => setFTurma(e.target.value)}>
+              <option value="">Todas as turmas</option>
+              {turmas.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!filtrando}
+              onClick={() => {
+                setFDia("");
+                setFTipo("");
+                setFStatus("");
+                setFProfessor("");
+                setFTurma("");
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Limpar filtros
+            </button>
+          </div>
+          {dias.length === 0 && <EmptyState label="Nenhuma aula encontrada com esses filtros." />}
           {dias.map((dia, i) => (
             <section key={dia.chave}>
               {dia.passado && !dias[i - 1]?.passado && (
@@ -295,7 +434,83 @@ export default function AulasPage() {
                 </span>
               </h2>
               <ul className="flex flex-col gap-3">
-                {dia.aulas.map((aula) => (
+                {dia.aulas.map((aula) =>
+                  editId === aula.id ? (
+                    <li
+                      key={aula.id}
+                      className="rounded-xl border border-violet-300 bg-white p-4 shadow-sm dark:border-violet-500/40 dark:bg-slate-900"
+                    >
+                      <form onSubmit={salvarEdicao} className="flex flex-col gap-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select className={CAMPO} value={eTipo} onChange={(e) => setETipo(e.target.value)}>
+                            <option value="aula">Aula</option>
+                            <option value="prova">Prova</option>
+                          </select>
+                          <input
+                            className={CAMPO}
+                            placeholder="Matéria"
+                            value={eMateria}
+                            onChange={(e) => setEMateria(e.target.value)}
+                          />
+                          <input
+                            className={CAMPO}
+                            type="datetime-local"
+                            value={eDataHora}
+                            onChange={(e) => setEDataHora(e.target.value)}
+                            required
+                          />
+                          <input
+                            className={CAMPO}
+                            type="number"
+                            min={1}
+                            value={eDuracao}
+                            onChange={(e) => setEDuracao(Number(e.target.value))}
+                            required
+                          />
+                          <select
+                            className={CAMPO}
+                            value={eProfessorId}
+                            onChange={(e) => setEProfessorId(e.target.value)}
+                            required
+                          >
+                            {professores.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.nome}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className={CAMPO}
+                            value={eAlunoId}
+                            onChange={(e) => setEAlunoId(e.target.value)}
+                            required
+                          >
+                            {alunos.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={editSaving}
+                            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
+                          >
+                            {editSaving ? "Salvando..." : "Salvar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditId(null)}
+                            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </form>
+                    </li>
+                  ) : (
             <li
               key={aula.id}
               className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
@@ -342,14 +557,23 @@ export default function AulasPage() {
                   ))}
                 </select>
               </div>
+              <div className="flex shrink-0 flex-col gap-2">
+              <button
+                onClick={() => iniciarEdicao(aula)}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Editar
+              </button>
               <button
                 onClick={() => handleDelete(aula.id)}
                 className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
               >
                 Excluir
               </button>
+              </div>
             </li>
-                ))}
+                  ),
+                )}
               </ul>
             </section>
           ))}

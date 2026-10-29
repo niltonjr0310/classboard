@@ -28,6 +28,7 @@ export default function AlunosPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const [busca, setBusca] = useState("");
+  const [filtroTurma, setFiltroTurma] = useState(""); // "" = todas, "sem" = sem turma, ou o id da turma
   const [massMode, setMassMode] = useState(false);
   const [massText, setMassText] = useState("");
   const [massSaving, setMassSaving] = useState(false);
@@ -225,11 +226,20 @@ export default function AlunosPage() {
 
   // Agrupa por turma (ordem natural: 6º A, 7º A, ...), "Sem turma" por último.
   const termo = busca.trim().toLowerCase();
-  const filtrados = termo
+  const porBusca = termo
     ? alunos.filter(
         (a) => a.nome.toLowerCase().includes(termo) || a.email.toLowerCase().includes(termo),
       )
     : alunos;
+  const filtrados = porBusca.filter((a) =>
+    filtroTurma === ""
+      ? true
+      : filtroTurma === "sem"
+        ? !a.turma
+        : String(a.turma?.id) === filtroTurma,
+  );
+  const contagemTurma = (id: number) => porBusca.filter((a) => a.turma?.id === id).length;
+  const semTurma = porBusca.filter((a) => !a.turma).length;
   const porTurma = new Map<string, Aluno[]>();
   for (const a of filtrados) {
     const chave = a.turma?.nome ?? "Sem turma";
@@ -394,6 +404,30 @@ export default function AlunosPage() {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
+          {(turmas.length > 0 || semTurma > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {[
+                { valor: "", rotulo: "Todas", total: porBusca.length },
+                ...[...turmas]
+                  .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR", { numeric: true }))
+                  .map((t) => ({ valor: String(t.id), rotulo: t.nome, total: contagemTurma(t.id) })),
+                ...(semTurma > 0 ? [{ valor: "sem", rotulo: "Sem turma", total: semTurma }] : []),
+              ].map((op) => (
+                <button
+                  key={op.valor || "todas"}
+                  type="button"
+                  onClick={() => setFiltroTurma(op.valor)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    filtroTurma === op.valor
+                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {op.rotulo} · {op.total}
+                </button>
+              ))}
+            </div>
+          )}
           {grupos.length === 0 && (
             <EmptyState label="Nenhum aluno encontrado para essa busca." />
           )}
