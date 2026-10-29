@@ -1,19 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSomenteAdmin } from "../hooks/useBloquearAluno";
+import { API_URL, authHeaders } from "../lib/api";
 
-type Professor = { id: number; nome: string };
+type Professor = { id: number; nome: string; disciplina?: string };
 type Aluno = { id: number; nome: string };
 type Aula = {
   id: number;
   dataHora: string;
   duracao: number;
   status: string;
+  tipo: string;
+  materia: string | null;
   professor: Professor;
   aluno: Aluno;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 const STATUS_STYLES: Record<string, string> = {
   agendada:
@@ -31,6 +34,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function AulasPage() {
+  useSomenteAdmin();
   const [aulas, setAulas] = useState<Aula[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -38,6 +42,8 @@ export default function AulasPage() {
   const [duracao, setDuracao] = useState(60);
   const [professorId, setProfessorId] = useState("");
   const [alunoId, setAlunoId] = useState("");
+  const [tipo, setTipo] = useState("aula");
+  const [materia, setMateria] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -45,13 +51,13 @@ export default function AulasPage() {
   async function carregar() {
     try {
       const [aulasRes, profRes, alunosRes] = await Promise.all([
-        fetch(`${API_URL}/aulas`),
-        fetch(`${API_URL}/professores`),
-        fetch(`${API_URL}/alunos`),
+        fetch(`${API_URL}/aulas`, { headers: authHeaders() }),
+        fetch(`${API_URL}/professores`, { headers: authHeaders() }),
+        fetch(`${API_URL}/alunos`, { headers: authHeaders() }),
       ]);
-      setAulas(await aulasRes.json());
-      setProfessores(await profRes.json());
-      setAlunos(await alunosRes.json());
+      setAulas(aulasRes.ok ? await aulasRes.json() : []);
+      setProfessores(profRes.ok ? await profRes.json() : []);
+      setAlunos(alunosRes.ok ? await alunosRes.json() : []);
     } catch {
       setFeedback("Não foi possível carregar os dados. Tente novamente.");
     } finally {
@@ -69,22 +75,26 @@ export default function AulasPage() {
     try {
       await fetch(`${API_URL}/aulas`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           dataHora: new Date(dataHora).toISOString(),
           duracao: Number(duracao),
           professorId: Number(professorId),
           alunoId: Number(alunoId),
+          tipo,
+          materia: materia.trim() || undefined,
         }),
       });
       setDataHora("");
       setDuracao(60);
       setProfessorId("");
       setAlunoId("");
-      setFeedback("Aula agendada com sucesso.");
+      setMateria("");
+      setFeedback(tipo === "prova" ? "Prova agendada com sucesso." : "Aula agendada com sucesso.");
+      setTipo("aula");
       await carregar();
     } catch {
-      setFeedback("Erro ao agendar aula.");
+      setFeedback("Erro ao agendar.");
     } finally {
       setSaving(false);
     }
@@ -93,7 +103,7 @@ export default function AulasPage() {
   async function handleDelete(id: number) {
     if (!confirm("Excluir esta aula?")) return;
     try {
-      await fetch(`${API_URL}/aulas/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/aulas/${id}`, { method: "DELETE", headers: authHeaders() });
       setFeedback("Aula removida.");
       await carregar();
     } catch {
@@ -104,10 +114,20 @@ export default function AulasPage() {
   async function handleStatusChange(id: number, status: string) {
     await fetch(`${API_URL}/aulas/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ status }),
     });
     await carregar();
+  }
+
+  function handleProfessorChange(novoId: string) {
+    const anterior = professores.find((p) => String(p.id) === professorId);
+    const novo = professores.find((p) => String(p.id) === novoId);
+    setProfessorId(novoId);
+    // preenche a matéria com a disciplina do professor, sem sobrescrever o que o admin digitou
+    if (materia === "" || materia === anterior?.disciplina) {
+      setMateria(novo?.disciplina ?? "");
+    }
   }
 
   const semProfessores = !loading && professores.length === 0;
@@ -146,6 +166,23 @@ export default function AulasPage() {
         className="mb-8 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
       >
         <div className="grid gap-3 sm:grid-cols-2">
+          <select
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800"
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value)}
+          >
+            <option value="aula">Aula</option>
+            <option value="prova">Prova</option>
+          </select>
+          <input
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800"
+            type="text"
+            placeholder="Matéria (ex.: Matemática)"
+            value={materia}
+            onChange={(e) => setMateria(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
           <input
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800"
             type="datetime-local"
@@ -167,7 +204,7 @@ export default function AulasPage() {
           <select
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800"
             value={professorId}
-            onChange={(e) => setProfessorId(e.target.value)}
+            onChange={(e) => handleProfessorChange(e.target.value)}
             required
           >
             <option value="">Selecione o professor</option>
@@ -196,14 +233,14 @@ export default function AulasPage() {
           type="submit"
           disabled={saving || semProfessores || semAlunos}
         >
-          {saving ? "Agendando..." : "Agendar aula"}
+          {saving ? "Agendando..." : tipo === "prova" ? "Agendar prova" : "Agendar aula"}
         </button>
       </form>
 
       {loading ? (
         <AulasSkeleton />
       ) : aulas.length === 0 ? (
-        <EmptyState label="Nenhuma aula agendada ainda." />
+        <EmptyState label="Nenhuma aula ou prova agendada ainda." />
       ) : (
         <ul className="flex flex-col gap-3">
           {aulas.map((aula) => (
@@ -212,6 +249,22 @@ export default function AulasPage() {
               className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
             >
               <div className="min-w-0">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                      aula.tipo === "prova"
+                        ? "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                        : "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                    }`}
+                  >
+                    {aula.tipo === "prova" ? "Prova" : "Aula"}
+                  </span>
+                  {aula.materia && (
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {aula.materia}
+                    </span>
+                  )}
+                </div>
                 <p className="font-medium text-slate-900 dark:text-white">
                   {aula.professor.nome} <span className="text-slate-400">→</span> {aula.aluno.nome}
                 </p>

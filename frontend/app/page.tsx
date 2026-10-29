@@ -22,6 +22,27 @@ const features = [
     accent: "bg-violet-600",
     icon: "📅",
   },
+  {
+    title: "Turmas",
+    description: "Agrupe os alunos em turmas e acompanhe cada uma.",
+    href: "/turmas",
+    accent: "bg-amber-600",
+    icon: "🏫",
+  },
+  {
+    title: "Relatórios",
+    description: "Veja aulas e provas por período, professor, matéria e turma. Exporte em CSV.",
+    href: "/relatorios",
+    accent: "bg-rose-600",
+    icon: "📊",
+  },
+  {
+    title: "Minha escola",
+    description: "Nome e logo da escola, usados no cabeçalho e nos e-mails.",
+    href: "/escola",
+    accent: "bg-sky-600",
+    icon: "🎨",
+  },
 ];
 
 export default function Home() {
@@ -56,7 +77,7 @@ export default function Home() {
       </section>
 
       <section className="mx-auto max-w-5xl px-6 pb-24">
-        <div className="grid gap-6 sm:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f) => (
             <Link
               key={f.href}

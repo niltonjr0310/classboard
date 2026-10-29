@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+test
+.git
+.claude
+.cursor
+.agents
+.devin
+.windsurf
+.env
+.env.*
+env.yaml
+*.log

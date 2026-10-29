@@ -6,11 +6,45 @@ datasource db {
   provider = "postgresql"
 }
 
+model Escola {
+  id           Int         @id @default(autoincrement())
+  nome         String
+  logoUrl      String?
+  createdAt    DateTime    @default(now())
+  admins       Admin[]
+  professores  Professor[]
+  alunos       Aluno[]
+  turmas       Turma[]
+  aulas        Aula[]
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String   @unique
+  escola    Escola   @relation(fields: [escolaId], references: [id])
+  escolaId  Int
+  createdAt DateTime @default(now())
+}
+
+model Turma {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  escola    Escola   @relation(fields: [escolaId], references: [id])
+  escolaId  Int
+  alunos    Aluno[]
+  createdAt DateTime @default(now())
+
+  @@unique([escolaId, nome])
+}
+
 model Professor {
   id         Int      @id @default(autoincrement())
   nome       String
   email      String   @unique
   disciplina String
+  escola     Escola   @relation(fields: [escolaId], references: [id])
+  escolaId   Int
   aulas      Aula[]
   createdAt  DateTime @default(now())
 }
@@ -20,18 +54,36 @@ model Aluno {
   nome      String
   email     String   @unique
   serie     String
+  escola    Escola   @relation(fields: [escolaId], references: [id])
+  escolaId  Int
+  turma     Turma?   @relation(fields: [turmaId], references: [id])
+  turmaId   Int?
   aulas     Aula[]
   createdAt DateTime @default(now())
 }
 
 model Aula {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   dataHora    DateTime
   duracao     Int
-  status      String   @default("agendada")
+  status      String    @default("agendada")
+  tipo        String    @default("aula") // "aula" ou "prova"
+  materia     String?
+  escola      Escola    @relation(fields: [escolaId], references: [id])
+  escolaId    Int
   professor   Professor @relation(fields: [professorId], references: [id])
   professorId Int
-  aluno       Aluno    @relation(fields: [alunoId], references: [id])
+  aluno       Aluno     @relation(fields: [alunoId], references: [id])
   alunoId     Int
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+}
+
+model Notificacao {
+  id             Int      @id @default(autoincrement())
+  destinatario   String   // "ALUNO" ou "PROFESSOR"
+  destinatarioId Int
+  titulo         String
+  mensagem       String
+  lida           Boolean  @default(false)
+  createdAt      DateTime @default(now())
 }

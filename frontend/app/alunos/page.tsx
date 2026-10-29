@@ -1,21 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSomenteAdmin } from "../hooks/useBloquearAluno";
+import { API_URL, authHeaders } from "../lib/api";
 
 type Aluno = {
   id: number;
   nome: string;
   email: string;
   serie: string;
+  turma?: { id: number; nome: string } | null;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+type TurmaOpcao = { id: number; nome: string };
+
 
 export default function AlunosPage() {
+  useSomenteAdmin();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [serie, setSerie] = useState("");
+  const [turmas, setTurmas] = useState<TurmaOpcao[]>([]);
+  const [turmaId, setTurmaId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -27,9 +34,12 @@ export default function AlunosPage() {
 
   async function carregar() {
     try {
-      const res = await fetch(`${API_URL}/alunos`);
+      const res = await fetch(`${API_URL}/alunos`, { headers: authHeaders() });
       const data = await res.json();
-      setAlunos(data);
+      setAlunos(Array.isArray(data) ? data : []);
+      const resTurmas = await fetch(`${API_URL}/turmas`, { headers: authHeaders() });
+      const dataTurmas = resTurmas.ok ? await resTurmas.json() : [];
+      setTurmas(Array.isArray(dataTurmas) ? dataTurmas : []);
     } catch {
       setFeedback("Não foi possível carregar os alunos. Tente novamente.");
     } finally {
@@ -41,18 +51,41 @@ export default function AlunosPage() {
     carregar();
   }, []);
 
+  async function handleTurmaChange(aluno: Aluno, valor: string) {
+    const turma = turmas.find((t) => String(t.id) === valor);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${aluno.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify(
+          turma ? { turmaId: turma.id, serie: turma.nome } : { turmaId: null },
+        ),
+      });
+      if (!res.ok) throw new Error();
+      await carregar();
+    } catch {
+      setFeedback("Não foi possível mudar a turma do aluno.");
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    const turmaEscolhida = turmas.find((t) => String(t.id) === turmaId);
     try {
       await fetch(`${API_URL}/alunos`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, email, serie }),
+        headers: authHeaders(),
+        body: JSON.stringify(
+          turmaEscolhida
+            ? { nome, email, serie: turmaEscolhida.nome, turmaId: turmaEscolhida.id }
+            : { nome, email, serie },
+        ),
       });
       setNome("");
       setEmail("");
       setSerie("");
+      setTurmaId("");
       setFeedback(`Aluno "${nome}" cadastrado com sucesso.`);
       await carregar();
     } catch {
@@ -65,7 +98,7 @@ export default function AlunosPage() {
   async function handleDelete(id: number, nomeAluno: string) {
     if (!confirm(`Excluir o aluno "${nomeAluno}"?`)) return;
     try {
-      await fetch(`${API_URL}/alunos/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/alunos/${id}`, { method: "DELETE", headers: authHeaders() });
       setFeedback(`Aluno "${nomeAluno}" removido.`);
       await carregar();
     } catch {
@@ -163,7 +196,7 @@ export default function AlunosPage() {
       try {
         const res = await fetch(`${API_URL}/alunos`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify(a),
         });
         if (res.ok) sucesso++;
@@ -286,13 +319,34 @@ export default function AlunosPage() {
                 required
               />
             </div>
-            <input
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
-              placeholder="Série"
-              value={serie}
-              onChange={(e) => setSerie(e.target.value)}
-              required
-            />
+            {turmas.length > 0 ? (
+              <select
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
+                value={turmaId}
+                onChange={(e) => setTurmaId(e.target.value)}
+                required
+              >
+                <option value="">Selecione a turma</option>
+                {turmas.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
+                  placeholder="Série"
+                  value={serie}
+                  onChange={(e) => setSerie(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Cadastre turmas na aba Turmas para escolher aqui em vez de digitar a série.
+                </p>
+              </>
+            )}
             <button
               className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60"
               type="submit"
@@ -318,8 +372,22 @@ export default function AlunosPage() {
               <div>
                 <p className="font-medium text-slate-900 dark:text-white">{a.nome}</p>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {a.email} · {a.serie}
+                  {a.email} · {a.turma?.nome ?? a.serie}
                 </p>
+                {turmas.length > 0 && (
+                  <select
+                    className="mt-2 rounded-lg border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                    value={a.turma?.id ?? ""}
+                    onChange={(e) => handleTurmaChange(a, e.target.value)}
+                  >
+                    <option value="">Sem turma</option>
+                    {turmas.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nome}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <button
                 onClick={() => handleDelete(a.id, a.nome)}

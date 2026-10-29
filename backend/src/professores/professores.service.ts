@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessoreDto } from './dto/create-professore.dto';
 import { UpdateProfessoreDto } from './dto/update-professore.dto';
@@ -7,26 +7,42 @@ import { UpdateProfessoreDto } from './dto/update-professore.dto';
 export class ProfessoresService {
   constructor(private prisma: PrismaService) {}
 
-  create(createProfessoreDto: CreateProfessoreDto) {
-    return this.prisma.professor.create({ data: createProfessoreDto });
+  /** Só campos permitidos: o cliente nunca define escolaId. */
+  private dados(dto: UpdateProfessoreDto) {
+    const data: { nome?: string; email?: string; disciplina?: string } = {};
+    if (dto.nome !== undefined) data.nome = dto.nome;
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.disciplina !== undefined) data.disciplina = dto.disciplina;
+    return data;
   }
 
-  findAll() {
-    return this.prisma.professor.findMany();
+  private async garantir(id: number, escolaId: number) {
+    const professor = await this.prisma.professor.findFirst({ where: { id, escolaId } });
+    if (!professor) throw new NotFoundException('Professor não encontrado.');
+    return professor;
   }
 
-  findOne(id: number) {
-    return this.prisma.professor.findUnique({ where: { id } });
-  }
-
-  update(id: number, updateProfessoreDto: UpdateProfessoreDto) {
-    return this.prisma.professor.update({
-      where: { id },
-      data: updateProfessoreDto,
+  create(dto: CreateProfessoreDto, escolaId: number) {
+    return this.prisma.professor.create({
+      data: { nome: dto.nome, email: dto.email, disciplina: dto.disciplina, escolaId },
     });
   }
 
-  remove(id: number) {
+  findAll(escolaId: number) {
+    return this.prisma.professor.findMany({ where: { escolaId }, orderBy: { nome: 'asc' } });
+  }
+
+  findOne(id: number, escolaId: number) {
+    return this.garantir(id, escolaId);
+  }
+
+  async update(id: number, dto: UpdateProfessoreDto, escolaId: number) {
+    await this.garantir(id, escolaId);
+    return this.prisma.professor.update({ where: { id }, data: this.dados(dto) });
+  }
+
+  async remove(id: number, escolaId: number) {
+    await this.garantir(id, escolaId);
     return this.prisma.professor.delete({ where: { id } });
   }
 }

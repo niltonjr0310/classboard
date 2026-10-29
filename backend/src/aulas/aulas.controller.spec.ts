@@ -1,20 +1,17 @@
-import { Test, TestingModule } from '@nestjs/testing';
+jest.mock('../prisma/prisma.service', () => ({ PrismaService: class {} }));
+
 import { AulasController } from './aulas.controller';
-import { AulasService } from './aulas.service';
+import { AdminGuard } from '../auth/admin.guard';
 
 describe('AulasController', () => {
-  let controller: AulasController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [AulasController],
-      providers: [AulasService],
-    }).compile();
-
-    controller = module.get<AulasController>(AulasController);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('toda rota exige AdminGuard (exceto /aulas/minhas, que exige login)', () => {
+    const proto = AulasController.prototype as any;
+    const classeProtegida = (Reflect.getMetadata('__guards__', AulasController) ?? []).includes(AdminGuard);
+    const rotas = Object.getOwnPropertyNames(proto).filter((n) => n !== 'constructor' && n !== 'findMinhas');
+    expect(rotas.length).toBeGreaterThan(0);
+    for (const nome of rotas) {
+      const guards = Reflect.getMetadata('__guards__', proto[nome]) ?? [];
+      expect({ nome, admin: classeProtegida || guards.includes(AdminGuard) }).toEqual({ nome, admin: true });
+    }
   });
 });

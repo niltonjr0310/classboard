@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSomenteAdmin } from "../hooks/useBloquearAluno";
+import { API_URL, authHeaders } from "../lib/api";
 
 type Professor = {
   id: number;
@@ -9,9 +11,9 @@ type Professor = {
   disciplina: string;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export default function ProfessoresPage() {
+  useSomenteAdmin();
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -27,9 +29,9 @@ export default function ProfessoresPage() {
 
   async function carregar() {
     try {
-      const res = await fetch(`${API_URL}/professores`);
+      const res = await fetch(`${API_URL}/professores`, { headers: authHeaders() });
       const data = await res.json();
-      setProfessores(data);
+      setProfessores(Array.isArray(data) ? data : []);
     } catch {
       setFeedback("Não foi possível carregar os professores. Tente novamente.");
     } finally {
@@ -47,7 +49,7 @@ export default function ProfessoresPage() {
     try {
       await fetch(`${API_URL}/professores`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ nome, email, disciplina }),
       });
       setNome("");
@@ -65,7 +67,7 @@ export default function ProfessoresPage() {
   async function handleDelete(id: number, nomeProfessor: string) {
     if (!confirm(`Excluir o professor "${nomeProfessor}"?`)) return;
     try {
-      await fetch(`${API_URL}/professores/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/professores/${id}`, { method: "DELETE", headers: authHeaders() });
       setFeedback(`Professor "${nomeProfessor}" removido.`);
       await carregar();
     } catch {
@@ -163,7 +165,7 @@ export default function ProfessoresPage() {
       try {
         const res = await fetch(`${API_URL}/professores`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify(p),
         });
         if (res.ok) sucesso++;
