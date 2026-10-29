@@ -33,6 +33,27 @@ const STATUS_LABELS: Record<string, string> = {
   cancelada: "Cancelada",
 };
 
+const TZ = "America/Sao_Paulo";
+
+function diaChave(data: Date) {
+  return data.toLocaleDateString("en-CA", { timeZone: TZ }); // AAAA-MM-DD
+}
+
+function rotuloDia(chave: string, hoje: string, amanha: string) {
+  const [a, m, d] = chave.split("-").map(Number);
+  const texto = new Date(Date.UTC(a, m - 1, d, 12)).toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const cap = texto.charAt(0).toUpperCase() + texto.slice(1);
+  if (chave === hoje) return `Hoje · ${cap}`;
+  if (chave === amanha) return `Amanhã · ${cap}`;
+  return cap;
+}
+
 export default function AulasPage() {
   useSomenteAdmin();
   const [aulas, setAulas] = useState<Aula[]>([]);
@@ -132,6 +153,23 @@ export default function AulasPage() {
 
   const semProfessores = !loading && professores.length === 0;
   const semAlunos = !loading && alunos.length === 0;
+
+  // Agrupa por dia: próximos dias primeiro (do mais perto ao mais longe), depois os anteriores.
+  const hoje = diaChave(new Date());
+  const amanha = diaChave(new Date(Date.now() + 86400000));
+  const porDia = new Map<string, Aula[]>();
+  for (const aula of aulas) {
+    const k = diaChave(new Date(aula.dataHora));
+    porDia.set(k, [...(porDia.get(k) ?? []), aula]);
+  }
+  const chaves = [...porDia.keys()];
+  const proximos = chaves.filter((k) => k >= hoje).sort();
+  const anteriores = chaves.filter((k) => k < hoje).sort().reverse();
+  const dias = [...proximos, ...anteriores].map((k) => ({
+    chave: k,
+    passado: k < hoje,
+    aulas: [...(porDia.get(k) ?? [])].sort((x, y) => x.dataHora.localeCompare(y.dataHora)),
+  }));
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -242,8 +280,22 @@ export default function AulasPage() {
       ) : aulas.length === 0 ? (
         <EmptyState label="Nenhuma aula ou prova agendada ainda." />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {aulas.map((aula) => (
+        <div className="flex flex-col gap-8">
+          {dias.map((dia, i) => (
+            <section key={dia.chave}>
+              {dia.passado && !dias[i - 1]?.passado && (
+                <p className="mb-4 border-t border-slate-200 pt-6 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
+                  Dias anteriores
+                </p>
+              )}
+              <h2 className="mb-3 flex items-baseline justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span>{rotuloDia(dia.chave, hoje, amanha)}</span>
+                <span className="text-xs font-normal text-slate-400">
+                  {dia.aulas.length} {dia.aulas.length === 1 ? "item" : "itens"}
+                </span>
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {dia.aulas.map((aula) => (
             <li
               key={aula.id}
               className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
@@ -269,7 +321,12 @@ export default function AulasPage() {
                   {aula.professor.nome} <span className="text-slate-400">→</span> {aula.aluno.nome}
                 </p>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {new Date(aula.dataHora).toLocaleString("pt-BR")} · {aula.duracao} min
+                  {new Date(aula.dataHora).toLocaleTimeString("pt-BR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: TZ,
+                  })}{" "}
+                  · {aula.duracao} min
                 </p>
                 <select
                   className={`mt-2 rounded-lg border px-2 py-1 text-xs font-medium ${
@@ -292,8 +349,11 @@ export default function AulasPage() {
                 Excluir
               </button>
             </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

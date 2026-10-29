@@ -27,6 +27,7 @@ export default function AlunosPage() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  const [busca, setBusca] = useState("");
   const [massMode, setMassMode] = useState(false);
   const [massText, setMassText] = useState("");
   const [massSaving, setMassSaving] = useState(false);
@@ -222,6 +223,29 @@ export default function AlunosPage() {
     }
   }
 
+  // Agrupa por turma (ordem natural: 6º A, 7º A, ...), "Sem turma" por último.
+  const termo = busca.trim().toLowerCase();
+  const filtrados = termo
+    ? alunos.filter(
+        (a) => a.nome.toLowerCase().includes(termo) || a.email.toLowerCase().includes(termo),
+      )
+    : alunos;
+  const porTurma = new Map<string, Aluno[]>();
+  for (const a of filtrados) {
+    const chave = a.turma?.nome ?? "Sem turma";
+    porTurma.set(chave, [...(porTurma.get(chave) ?? []), a]);
+  }
+  const grupos: [string, Aluno[]][] = [...porTurma.entries()]
+    .sort(([x], [y]) => {
+      if (x === "Sem turma") return 1;
+      if (y === "Sem turma") return -1;
+      return x.localeCompare(y, "pt-BR", { numeric: true });
+    })
+    .map(([nomeTurma, lista]): [string, Aluno[]] => [
+      nomeTurma,
+      [...lista].sort((p, q) => p.nome.localeCompare(q.nome, "pt-BR")),
+    ]);
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-8 flex items-center justify-between">
@@ -363,8 +387,26 @@ export default function AlunosPage() {
       ) : alunos.length === 0 ? (
         <EmptyState label="Nenhum aluno cadastrado ainda." />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {alunos.map((a) => (
+        <div className="flex flex-col gap-6">
+          <input
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
+            placeholder="Buscar aluno por nome ou e-mail"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          {grupos.length === 0 && (
+            <EmptyState label="Nenhum aluno encontrado para essa busca." />
+          )}
+          {grupos.map(([nomeTurma, lista]) => (
+            <details key={nomeTurma} open className="group">
+              <summary className="mb-3 flex cursor-pointer list-none items-baseline justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span>{nomeTurma}</span>
+                <span className="text-xs font-normal text-slate-400">
+                  {lista.length} {lista.length === 1 ? "aluno" : "alunos"}
+                </span>
+              </summary>
+              <ul className="flex flex-col gap-3">
+                {lista.map((a) => (
             <li
               key={a.id}
               className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
@@ -396,8 +438,11 @@ export default function AlunosPage() {
                 Excluir
               </button>
             </li>
+                ))}
+              </ul>
+            </details>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
