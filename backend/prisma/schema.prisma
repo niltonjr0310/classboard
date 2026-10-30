@@ -60,6 +60,14 @@ model Aluno {
   turmaId   Int?
   aulas     Aula[]
   createdAt DateTime @default(now())
+
+  // Responsável legal e consentimento (LGPD)
+  responsavelNome       String?
+  responsavelEmail      String?
+  responsavelTelefone   String?
+  consentimentoToken    String?   @unique
+  consentimentoEnviadoEm DateTime?
+  consentimentoEm       DateTime?
 }
 
 model Aula {

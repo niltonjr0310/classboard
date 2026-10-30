@@ -10,6 +10,10 @@ type Aluno = {
   email: string;
   serie: string;
   turma?: { id: number; nome: string } | null;
+  responsavelNome?: string | null;
+  responsavelEmail?: string | null;
+  responsavelTelefone?: string | null;
+  consentimentoEm?: string | null;
 };
 
 type TurmaOpcao = { id: number; nome: string };
@@ -23,6 +27,9 @@ export default function AlunosPage() {
   const [serie, setSerie] = useState("");
   const [turmas, setTurmas] = useState<TurmaOpcao[]>([]);
   const [turmaId, setTurmaId] = useState("");
+  const [respNome, setRespNome] = useState("");
+  const [respEmail, setRespEmail] = useState("");
+  const [respTel, setRespTel] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -78,23 +85,49 @@ export default function AlunosPage() {
       await fetch(`${API_URL}/alunos`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify(
-          turmaEscolhida
+        body: JSON.stringify({
+          ...(turmaEscolhida
             ? { nome, email, serie: turmaEscolhida.nome, turmaId: turmaEscolhida.id }
-            : { nome, email, serie },
-        ),
+            : { nome, email, serie }),
+          ...(respEmail.trim()
+            ? {
+                responsavelNome: respNome.trim() || null,
+                responsavelEmail: respEmail.trim(),
+                responsavelTelefone: respTel.trim() || null,
+              }
+            : {}),
+        }),
       });
       setNome("");
       setEmail("");
       setSerie("");
       setTurmaId("");
-      setFeedback(`Aluno "${nome}" cadastrado com sucesso.`);
+      setRespNome("");
+      setRespEmail("");
+      setRespTel("");
+      setFeedback(
+        respEmail.trim()
+          ? `Aluno "${nome}" cadastrado. Pedido de autorização enviado ao responsável.`
+          : `Aluno "${nome}" cadastrado com sucesso.`,
+      );
       await carregar();
     } catch {
       setFeedback("Erro ao cadastrar aluno.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function reenviarPedido(a: Aluno) {
+    const res = await fetch(`${API_URL}/alunos/${a.id}/consentimento/reenviar`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    setFeedback(
+      res.ok
+        ? `Pedido reenviado para ${a.responsavelEmail}.`
+        : "Não foi possível reenviar o pedido.",
+    );
   }
 
   async function handleDelete(id: number, nomeAluno: string) {
@@ -381,6 +414,16 @@ export default function AlunosPage() {
                 </p>
               </>
             )}
+            <fieldset className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 p-3 dark:border-slate-700">
+              <legend className="px-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                Responsável (recebe o pedido de autorização por e-mail)
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="Nome do responsável" value={respNome} onChange={(e) => setRespNome(e.target.value)} />
+                <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="E-mail do responsável" type="email" value={respEmail} onChange={(e) => setRespEmail(e.target.value)} />
+                <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="Telefone" value={respTel} onChange={(e) => setRespTel(e.target.value)} />
+              </div>
+            </fieldset>
             <button
               className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60"
               type="submit"
@@ -449,6 +492,22 @@ export default function AlunosPage() {
                 <p className="font-medium text-slate-900 dark:text-white">{a.nome}</p>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   {a.email} · {a.turma?.nome ?? a.serie}
+                </p>
+                <p className="mt-1 text-xs">
+                  {a.consentimentoEm ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      ✓ Responsável autorizou em {new Date(a.consentimentoEm).toLocaleDateString("pt-BR")}
+                    </span>
+                  ) : a.responsavelEmail ? (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Aguardando autorização de {a.responsavelNome || a.responsavelEmail}{" "}
+                      <button type="button" onClick={() => reenviarPedido(a)} className="underline">
+                        reenviar
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Sem responsável cadastrado</span>
+                  )}
                 </p>
                 {turmas.length > 0 && (
                   <select

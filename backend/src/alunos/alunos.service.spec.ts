@@ -9,8 +9,10 @@ describe('AlunosService (por escola)', () => {
     turma: { findFirst: jest.fn() },
     admin: { findFirst: jest.fn() },
     professor: { findFirst: jest.fn() },
+    escola: { findUnique: jest.fn() },
   };
-  const service = new AlunosService(prisma as any);
+  const email = { enviar: jest.fn().mockResolvedValue(undefined) };
+  const service = new AlunosService(prisma as any, email as any);
 
   beforeEach(() => jest.resetAllMocks());
 
@@ -71,5 +73,51 @@ describe('AlunosService (por escola)', () => {
     await expect(service.create({ nome: 'A', email: 'a@a.com', serie: '1' } as any, 3)).rejects.toThrow(
       ConflictException,
     );
+  });
+
+  describe('consentimento do responsável', () => {
+    const aluno = { id: 5, nome: 'Beto', escolaId: 3, responsavelEmail: 'mae@x.com', responsavelNome: 'Maria', consentimentoEm: null };
+
+    it('ao cadastrar com e-mail do responsável, envia o link e não devolve o token', async () => {
+      prisma.aluno.create.mockResolvedValue(aluno);
+      prisma.aluno.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(aluno);
+      prisma.aluno.update.mockResolvedValue({ ...aluno, consentimentoToken: 'segredo' });
+      prisma.escola.findUnique.mockResolvedValue({ nome: 'Colégio' });
+      const r: any = await service.create(
+        { nome: 'Beto', email: 'b@b.com', serie: '1', responsavelEmail: 'mae@x.com' } as any,
+        3,
+      );
+      expect(email.enviar).toHaveBeenCalledTimes(1);
+      expect(email.enviar.mock.calls[0][0]).toBe('mae@x.com');
+      expect(email.enviar.mock.calls[0][2]).toMatch(/\/consentimento\/[a-f0-9]{64}/);
+      expect(r).not.toHaveProperty('consentimentoToken');
+    });
+
+    it('sem responsável não envia nada', async () => {
+      prisma.aluno.create.mockResolvedValue({ id: 6, nome: 'X' });
+      await service.create({ nome: 'X', email: 'x@x.com', serie: '1' } as any, 3);
+      expect(email.enviar).not.toHaveBeenCalled();
+    });
+
+    it('rejeita token inválido e desconhecido', async () => {
+      await expect(service.consultarConsentimento('abc')).rejects.toThrow(NotFoundException);
+      prisma.aluno.findUnique = jest.fn().mockResolvedValue(null);
+      await expect(service.autorizarConsentimento('a'.repeat(64))).rejects.toThrow(NotFoundException);
+    });
+
+    it('autoriza uma vez e recusa link expirado', async () => {
+      const t = 'a'.repeat(64);
+      prisma.aluno.findUnique = jest.fn().mockResolvedValue({
+        ...aluno, escola: { nome: 'C' }, consentimentoEnviadoEm: new Date(),
+      });
+      prisma.aluno.update.mockResolvedValue({ consentimentoEm: new Date() });
+      const r = await service.autorizarConsentimento(t);
+      expect(r.autorizadoEm).toBeInstanceOf(Date);
+
+      prisma.aluno.findUnique = jest.fn().mockResolvedValue({
+        ...aluno, escola: { nome: 'C' }, consentimentoEnviadoEm: new Date(Date.now() - 31 * 86400000),
+      });
+      await expect(service.autorizarConsentimento(t)).rejects.toThrow(BadRequestException);
+    });
   });
 });

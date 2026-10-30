@@ -22,6 +22,12 @@ export class AlunosController {
   }
 
   @UseGuards(AdminGuard)
+  @Post(':id/consentimento/reenviar')
+  reenviar(@Param('id', ParseIntPipe) id: number, @EscolaAtual() escolaId: number) {
+    return this.alunosService.reenviarConsentimento(id, escolaId);
+  }
+
+  @UseGuards(AdminGuard)
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number, @EscolaAtual() escolaId: number) {
     return this.alunosService.findOne(id, escolaId);
@@ -41,5 +47,21 @@ export class AlunosController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @EscolaAtual() escolaId: number) {
     return this.alunosService.remove(id, escolaId);
+  }
+}
+
+/** Rotas públicas (sem login): o responsável abre o link recebido por e-mail. */
+@Controller('consentimento')
+export class ConsentimentoController {
+  constructor(private readonly alunosService: AlunosService) {}
+
+  @Get(':token')
+  consultar(@Param('token') token: string) {
+    return this.alunosService.consultarConsentimento(token);
+  }
+
+  @Post(':token/autorizar')
+  autorizar(@Param('token') token: string) {
+    return this.alunosService.autorizarConsentimento(token);
   }
 }
