@@ -10,6 +10,9 @@ describe('AlunosService (por escola)', () => {
     admin: { findFirst: jest.fn() },
     professor: { findFirst: jest.fn() },
     escola: { findUnique: jest.fn() },
+    aula: { findMany: jest.fn(), deleteMany: jest.fn() },
+    notificacao: { deleteMany: jest.fn() },
+    $transaction: jest.fn(),
   };
   const email = { enviar: jest.fn().mockResolvedValue(undefined) };
   const service = new AlunosService(prisma as any, email as any);
@@ -119,5 +122,17 @@ describe('AlunosService (por escola)', () => {
       });
       await expect(service.autorizarConsentimento(t)).rejects.toThrow(BadRequestException);
     });
+  });
+
+  it('ao excluir, apaga aulas e avisos do aluno junto, numa transação', async () => {
+    prisma.aluno.findFirst.mockResolvedValue({ id: 5, nome: 'Beto', escolaId: 3 });
+    prisma.aula.findMany.mockResolvedValue([{ professorId: 9 }, { professorId: 9 }]);
+    prisma.$transaction.mockResolvedValue([{}, {}, {}, { id: 5 }]);
+    const r = await service.remove(5, 3);
+    expect(prisma.aula.deleteMany).toHaveBeenCalledWith({ where: { alunoId: 5, escolaId: 3 } });
+    expect(prisma.notificacao.deleteMany).toHaveBeenCalledTimes(2);
+    expect(prisma.aluno.delete).toHaveBeenCalledWith({ where: { id: 5 } });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(r).toEqual({ id: 5 });
   });
 });

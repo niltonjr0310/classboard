@@ -54,6 +54,12 @@ export class AulasService {
     if (alunoId !== undefined) {
       const a = await this.prisma.aluno.findFirst({ where: { id: alunoId, escolaId } });
       if (!a) throw new BadRequestException('Aluno não encontrado nesta escola.');
+      // Responsável cadastrado mas sem autorização (LGPD): não agenda.
+      if (a.responsavelEmail && !a.consentimentoEm) {
+        throw new BadRequestException(
+          `${a.nome ?? 'O aluno'} ainda não tem a autorização do responsável. Peça para o responsável abrir o e-mail enviado (você pode reenviar em Alunos).`,
+        );
+      }
     }
   }
 

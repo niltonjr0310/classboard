@@ -201,9 +201,28 @@ export class AlunosService {
     return limpo(aluno);
   }
 
+  /** Apaga o aluno e tudo dele (aulas, provas e avisos): direito de exclusão da LGPD. */
   async remove(id: number, escolaId: number) {
-    await this.garantir(id, escolaId);
-    return this.prisma.aluno.delete({ where: { id } });
+    const aluno = await this.garantir(id, escolaId);
+    const aulas = await this.prisma.aula.findMany({
+      where: { alunoId: id, escolaId },
+      select: { professorId: true },
+    });
+    const professorIds = [...new Set((aulas ?? []).map((a) => a.professorId))];
+    const [, , , apagado] = await this.prisma.$transaction([
+      this.prisma.notificacao.deleteMany({ where: { destinatario: 'ALUNO', destinatarioId: id } }),
+      // Avisos enviados aos professores que citam o nome do aluno.
+      this.prisma.notificacao.deleteMany({
+        where: {
+          destinatario: 'PROFESSOR',
+          destinatarioId: { in: professorIds },
+          mensagem: { contains: `com o aluno ${aluno.nome}` },
+        },
+      }),
+      this.prisma.aula.deleteMany({ where: { alunoId: id, escolaId } }),
+      this.prisma.aluno.delete({ where: { id } }),
+    ]);
+    return apagado;
   }
 
   private traduzir(e: unknown) {

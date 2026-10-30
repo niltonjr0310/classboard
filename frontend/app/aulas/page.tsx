@@ -125,7 +125,7 @@ export default function AulasPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await fetch(`${API_URL}/aulas`, {
+      const res = await fetch(`${API_URL}/aulas`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -137,6 +137,12 @@ export default function AulasPage() {
           materia: materia.trim() || undefined,
         }),
       });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => null);
+        const msg = Array.isArray(corpo?.message) ? corpo.message.join(" ") : corpo?.message;
+        setFeedback(msg || "Erro ao agendar.");
+        return;
+      }
       setDataHora("");
       setDuracao(60);
       setProfessorId("");

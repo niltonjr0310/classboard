@@ -55,6 +55,21 @@ describe('AulasService', () => {
       await expect(service.create(dto, 1)).rejects.toThrow(BadRequestException);
     });
 
+    it('não agenda para aluno cujo responsável ainda não autorizou', async () => {
+      prisma.aluno.findFirst.mockResolvedValue({ id: 10, nome: 'Beto', responsavelEmail: 'mae@x.com', consentimentoEm: null });
+      await expect(service.create(dto, 1)).rejects.toThrow(/autorização do responsável/);
+      expect(prisma.aula.create).not.toHaveBeenCalled();
+    });
+
+    it('agenda se o responsável autorizou ou se não há responsável cadastrado', async () => {
+      prisma.aula.create.mockResolvedValue(aulaBase);
+      prisma.aluno.findFirst.mockResolvedValue({ id: 10, responsavelEmail: 'mae@x.com', consentimentoEm: new Date() });
+      await service.create(dto, 1);
+      prisma.aluno.findFirst.mockResolvedValue({ id: 10, responsavelEmail: null, consentimentoEm: null });
+      await service.create(dto, 1);
+      expect(prisma.aula.create).toHaveBeenCalledTimes(2);
+    });
+
     it('notifica e envia e-mail para aluno e professor com a marca da escola', async () => {
       prisma.aula.create.mockResolvedValue(aulaBase);
       await service.create(dto, 1);

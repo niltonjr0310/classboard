@@ -77,12 +77,18 @@ export default function AlunosPage() {
     }
   }
 
+  async function mensagemErro(res: Response, padrao: string) {
+    const corpo = await res.json().catch(() => null);
+    const msg = Array.isArray(corpo?.message) ? corpo.message.join(" ") : corpo?.message;
+    return msg || padrao;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     const turmaEscolhida = turmas.find((t) => String(t.id) === turmaId);
     try {
-      await fetch(`${API_URL}/alunos`, {
+      const res = await fetch(`${API_URL}/alunos`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -98,6 +104,10 @@ export default function AlunosPage() {
             : {}),
         }),
       });
+      if (!res.ok) {
+        setFeedback(await mensagemErro(res, "Erro ao cadastrar aluno."));
+        return;
+      }
       setNome("");
       setEmail("");
       setSerie("");
@@ -131,9 +141,13 @@ export default function AlunosPage() {
   }
 
   async function handleDelete(id: number, nomeAluno: string) {
-    if (!confirm(`Excluir o aluno "${nomeAluno}"?`)) return;
+    if (!confirm(`Excluir o aluno "${nomeAluno}"? Isso apaga também todas as aulas, provas e avisos dele. Não dá para desfazer.`)) return;
     try {
-      await fetch(`${API_URL}/alunos/${id}`, { method: "DELETE", headers: authHeaders() });
+      const res = await fetch(`${API_URL}/alunos/${id}`, { method: "DELETE", headers: authHeaders() });
+      if (!res.ok) {
+        setFeedback(await mensagemErro(res, "Não foi possível excluir o aluno."));
+        return;
+      }
       setFeedback(`Aluno "${nomeAluno}" removido.`);
       await carregar();
     } catch {
