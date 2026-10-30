@@ -196,7 +196,12 @@ export default function AulasPage() {
           alunoId: Number(eAlunoId),
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => null);
+        const msg = Array.isArray(corpo?.message) ? corpo.message.join(" ") : corpo?.message;
+        setFeedback(msg || "Não foi possível salvar as alterações.");
+        return;
+      }
       setFeedback("Aula atualizada.");
       setEditId(null);
       await carregar();
@@ -208,11 +213,15 @@ export default function AulasPage() {
   }
 
   async function handleStatusChange(id: number, status: string) {
-    await fetch(`${API_URL}/aulas/${id}`, {
+    const res = await fetch(`${API_URL}/aulas/${id}`, {
       method: "PATCH",
       headers: authHeaders(),
       body: JSON.stringify({ status }),
     });
+    if (!res.ok) {
+      const corpo = await res.json().catch(() => null);
+      setFeedback(corpo?.message || "Não foi possível mudar o status.");
+    }
     await carregar();
   }
 

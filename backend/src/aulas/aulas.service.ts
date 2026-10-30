@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAulaDto } from './dto/create-aula.dto';
@@ -63,6 +63,39 @@ export class AulasService {
     }
   }
 
+  /** Professor e aluno não podem ter duas aulas ao mesmo tempo (canceladas não contam). */
+  private async garantirSemConflito(
+    escolaId: number,
+    q: { professorId: number; alunoId: number; dataHora: Date; duracao: number; ignorarId?: number },
+  ) {
+    const MAX_MS = 600 * 60_000; // duração máxima permitida
+    const ini = q.dataHora.getTime();
+    const fim = ini + q.duracao * 60_000;
+    const candidatas =
+      (await this.prisma.aula.findMany({
+        where: {
+          escolaId,
+          status: { not: 'cancelada' },
+          ...(q.ignorarId ? { id: { not: q.ignorarId } } : {}),
+          OR: [{ professorId: q.professorId }, { alunoId: q.alunoId }],
+          dataHora: { gte: new Date(ini - MAX_MS), lt: new Date(fim) },
+        },
+        include: { professor: { select: { nome: true } }, aluno: { select: { nome: true } } },
+      })) ?? [];
+    const hora = (d: Date) =>
+      d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    for (const a of candidatas) {
+      const aIni = a.dataHora.getTime();
+      const aFim = aIni + a.duracao * 60_000;
+      if (aIni < fim && aFim > ini) {
+        const quem = a.professorId === q.professorId ? `O professor ${a.professor.nome}` : `O aluno ${a.aluno.nome}`;
+        throw new ConflictException(
+          `${quem} já tem uma aula nesse horário (${hora(a.dataHora)} às ${hora(new Date(aFim))}).`,
+        );
+      }
+    }
+  }
+
   /** Responsável só recebe depois de autorizar. */
   private avisarResponsavel(
     aluno: { nome: string; responsavelNome?: string | null; responsavelEmail?: string | null; consentimentoEm?: Date | null },
@@ -88,6 +121,14 @@ export class AulasService {
 
   async create(dto: CreateAulaDto, escolaId: number) {
     await this.validarParticipantes(escolaId, dto.professorId, dto.alunoId);
+    if (dto.status !== 'cancelada') {
+      await this.garantirSemConflito(escolaId, {
+        professorId: dto.professorId,
+        alunoId: dto.alunoId,
+        dataHora: new Date(dto.dataHora),
+        duracao: dto.duracao,
+      });
+    }
 
     const aula = await this.prisma.aula.create({
       data: {
@@ -184,6 +225,24 @@ export class AulasService {
   async update(id: number, dto: UpdateAulaDto, escolaId: number) {
     const aulaAnterior = await this.garantir(id, escolaId);
     await this.validarParticipantes(escolaId, dto.professorId, dto.alunoId);
+
+    // Muda horário, duração, professor, aluno ou reativa uma cancelada: confere conflito.
+    const statusFinal = dto.status ?? aulaAnterior.status;
+    const mexeuNoHorario =
+      dto.dataHora !== undefined ||
+      dto.duracao !== undefined ||
+      dto.professorId !== undefined ||
+      dto.alunoId !== undefined ||
+      (aulaAnterior.status === 'cancelada' && statusFinal !== 'cancelada');
+    if (mexeuNoHorario && statusFinal !== 'cancelada') {
+      await this.garantirSemConflito(escolaId, {
+        professorId: dto.professorId ?? aulaAnterior.professorId,
+        alunoId: dto.alunoId ?? aulaAnterior.alunoId,
+        dataHora: dto.dataHora ? new Date(dto.dataHora) : aulaAnterior.dataHora,
+        duracao: dto.duracao ?? aulaAnterior.duracao,
+        ignorarId: id,
+      });
+    }
 
     const data: Prisma.AulaUncheckedUpdateInput = {};
     if (dto.dataHora) data.dataHora = new Date(dto.dataHora);

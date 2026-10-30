@@ -1,6 +1,6 @@
 jest.mock('../prisma/prisma.service', () => ({ PrismaService: class {} }));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AulasService } from './aulas.service';
 
 describe('AulasService', () => {
@@ -215,6 +215,66 @@ describe('AulasService', () => {
       await service.create(dto, 1);
       expect(email.enviar.mock.calls.map((c) => c[0])).not.toContain('mae@x.com');
       expect(email.enviar).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('conflito de horário', () => {
+    const dto = { dataHora: '2026-11-10T17:00:00Z', duracao: 60, professorId: 20, alunoId: 10 } as any;
+    const existente = (extra: any = {}) => ({
+      id: 99,
+      dataHora: new Date('2026-11-10T16:30:00Z'), // 13:30–14:30 (Brasília)
+      duracao: 60,
+      professorId: 20,
+      alunoId: 11,
+      professor: { nome: 'Ana' },
+      aluno: { nome: 'Caio' },
+      ...extra,
+    });
+
+    it('recusa quando o professor já tem aula que se sobrepõe', async () => {
+      prisma.aula.findMany.mockResolvedValue([existente()]);
+      await expect(service.create(dto, 1)).rejects.toThrow(ConflictException);
+      await expect(service.create(dto, 1)).rejects.toThrow(/professor Ana/);
+      expect(prisma.aula.create).not.toHaveBeenCalled();
+    });
+
+    it('recusa quando o aluno já tem aula que se sobrepõe', async () => {
+      prisma.aula.findMany.mockResolvedValue([existente({ professorId: 21, alunoId: 10, aluno: { nome: 'Beto' } })]);
+      await expect(service.create(dto, 1)).rejects.toThrow(/aluno Beto/);
+    });
+
+    it('aceita aula que só encosta (termina quando a outra começa)', async () => {
+      prisma.aula.findMany.mockResolvedValue([existente({ dataHora: new Date('2026-11-10T16:00:00Z') })]); // 13:00–14:00
+      prisma.aula.create.mockResolvedValue(aulaBase);
+      await service.create(dto, 1);
+      expect(prisma.aula.create).toHaveBeenCalled();
+    });
+
+    it('ignora canceladas na busca e a própria aula ao editar', async () => {
+      prisma.aula.findMany.mockResolvedValue([]);
+      prisma.aula.create.mockResolvedValue(aulaBase);
+      await service.create(dto, 1);
+      expect(prisma.aula.findMany.mock.calls[0][0].where.status).toEqual({ not: 'cancelada' });
+
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue(aulaBase);
+      prisma.aula.findMany.mockClear();
+      await service.update(1, { dataHora: '2026-11-10T18:00:00Z' }, 1);
+      expect(prisma.aula.findMany.mock.calls[0][0].where.id).toEqual({ not: 1 });
+    });
+
+    it('não confere conflito ao só mudar status ou ao cancelar', async () => {
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue({ ...aulaBase, status: 'concluida' });
+      await service.update(1, { status: 'concluida' }, 1);
+      await service.update(1, { status: 'cancelada', dataHora: '2026-11-10T18:00:00Z' }, 1);
+      expect(prisma.aula.findMany).not.toHaveBeenCalled();
+    });
+
+    it('reativar aula cancelada confere conflito', async () => {
+      prisma.aula.findFirst.mockResolvedValue({ ...aulaBase, status: 'cancelada', duracao: 60 });
+      prisma.aula.findMany.mockResolvedValue([existente({ dataHora: new Date('2026-11-10T17:30:00Z') })]);
+      await expect(service.update(1, { status: 'agendada' }, 1)).rejects.toThrow(ConflictException);
     });
   });
 });
