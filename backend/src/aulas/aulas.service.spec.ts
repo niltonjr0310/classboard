@@ -182,4 +182,39 @@ describe('AulasService', () => {
       expect(prisma.aula.update.mock.calls[0][0].data).not.toHaveProperty('escolaId');
     });
   });
+
+  describe('aviso ao responsável', () => {
+    const resp = { responsavelNome: 'Maria', responsavelEmail: 'mae@x.com', consentimentoEm: new Date() };
+    const dto = { dataHora: '2026-11-10T17:00:00Z', duracao: 60, professorId: 20, alunoId: 10 } as any;
+    const comResp = { ...aulaBase, aluno: { ...aulaBase.aluno, ...resp } };
+
+    it('recebe aula agendada, remarcada e cancelada depois de autorizar', async () => {
+      prisma.aula.create.mockResolvedValue(comResp);
+      await service.create(dto, 1);
+      expect(email.enviar.mock.calls.map((c) => c[0])).toContain('mae@x.com');
+
+      email.enviar.mockClear();
+      prisma.aula.findFirst.mockResolvedValue(aulaBase);
+      prisma.aula.update.mockResolvedValue({ ...comResp, dataHora: new Date('2026-11-12T18:00:00Z') });
+      await service.update(1, { dataHora: '2026-11-12T18:00:00Z' }, 1);
+      expect(email.enviar.mock.calls.map((c) => c[0])).toContain('mae@x.com');
+
+      email.enviar.mockClear();
+      prisma.aula.update.mockResolvedValue({ ...comResp, status: 'cancelada' });
+      await service.update(1, { status: 'cancelada' }, 1);
+      expect(email.enviar.mock.calls.map((c) => c[0])).toContain('mae@x.com');
+    });
+
+    it('não recebe se não autorizou ou se não há responsável', async () => {
+      prisma.aula.create.mockResolvedValue({
+        ...aulaBase,
+        aluno: { ...aulaBase.aluno, ...resp, consentimentoEm: null },
+      });
+      await service.create(dto, 1);
+      prisma.aula.create.mockResolvedValue(aulaBase);
+      await service.create(dto, 1);
+      expect(email.enviar.mock.calls.map((c) => c[0])).not.toContain('mae@x.com');
+      expect(email.enviar).toHaveBeenCalledTimes(4);
+    });
+  });
 });

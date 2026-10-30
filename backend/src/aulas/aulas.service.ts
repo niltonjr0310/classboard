@@ -63,6 +63,23 @@ export class AulasService {
     }
   }
 
+  /** Responsável só recebe depois de autorizar. */
+  private avisarResponsavel(
+    aluno: { nome: string; responsavelNome?: string | null; responsavelEmail?: string | null; consentimentoEm?: Date | null },
+    escola: Escola,
+    assunto: string,
+    corpo: string,
+  ) {
+    if (!aluno.responsavelEmail || !aluno.consentimentoEm) return Promise.resolve();
+    const ola = aluno.responsavelNome ? `Olá, ${esc(aluno.responsavelNome)}.` : 'Olá.';
+    return this.emailService.enviar(
+      aluno.responsavelEmail,
+      assunto,
+      emailHtml(escola, `<p>${ola}</p>${corpo}`),
+      escola.nome,
+    );
+  }
+
   private async garantir(id: number, escolaId: number) {
     const aula = await this.prisma.aula.findFirst({ where: { id, escolaId } });
     if (!aula) throw new NotFoundException('Aula não encontrada.');
@@ -121,6 +138,13 @@ export class AulasService {
           `<p>Olá, ${esc(aula.professor.nome)}!</p><p><strong>${tipoCap}${materia}</strong> com o aluno <strong>${esc(aula.aluno.nome)}</strong> agendada para <strong>${data}</strong>.</p>`,
         ),
         escola.nome,
+      ),
+ ,
+      this.avisarResponsavel(
+        aula.aluno,
+        escola,
+        assunto,
+        `<p><strong>${tipoCap}${materia}</strong> de <strong>${esc(aula.aluno.nome)}</strong> com o professor <strong>${esc(aula.professor.nome)}</strong> agendada para <strong>${data}</strong>.</p>`,
       ),
     ]);
 
@@ -215,6 +239,13 @@ export class AulasService {
           ),
           escola.nome,
         ),
+ ,
+        this.avisarResponsavel(
+          aula.aluno,
+          escola,
+          assunto,
+          `<p>A ${tipo}${materia} de <strong>${esc(aula.aluno.nome)}</strong> com o professor <strong>${esc(aula.professor.nome)}</strong> marcada para <strong>${dataFmt}</strong> foi <strong>cancelada</strong>.</p>`,
+        ),
       ]);
     }
 
@@ -262,6 +293,13 @@ export class AulasService {
             `<p>Olá, ${esc(aula.professor.nome)}.</p><p>Sua ${tipo}${materia} com o aluno <strong>${esc(aula.aluno.nome)}</strong> foi <strong>remarcada</strong>.</p><p>De: ${dataAntiga}<br>Para: <strong>${dataNova}</strong></p>`,
           ),
           escola.nome,
+        ),
+ ,
+        this.avisarResponsavel(
+          aula.aluno,
+          escola,
+          assunto,
+          `<p>A ${tipo}${materia} de <strong>${esc(aula.aluno.nome)}</strong> com o professor <strong>${esc(aula.professor.nome)}</strong> foi <strong>remarcada</strong>.</p><p>De: ${dataAntiga}<br>Para: <strong>${dataNova}</strong></p>`,
         ),
       ]);
     }
