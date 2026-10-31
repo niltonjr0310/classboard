@@ -19,6 +19,8 @@ type Aluno = {
 type TurmaOpcao = { id: number; nome: string };
 
 
+type ErroImport = { linha: number; texto: string; motivo: string };
+
 export default function AlunosPage() {
   useSomenteAdmin();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -38,6 +40,7 @@ export default function AlunosPage() {
   const [filtroTurma, setFiltroTurma] = useState(""); // "" = todas, "sem" = sem turma, ou o id da turma
   const [massMode, setMassMode] = useState(false);
   const [massText, setMassText] = useState("");
+  const [errosImport, setErrosImport] = useState<ErroImport[]>([]);
   const [massSaving, setMassSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,25 +159,38 @@ export default function AlunosPage() {
   }
 
   function parseMassLines(text: string) {
-    const linhas = text
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const validos: { linha: number; texto: string; dados: { nome: string; email: string; serie: string } }[] = [];
+    const erros: ErroImport[] = [];
+    const vistos = new Map<string, number>();
 
-    const validos: { nome: string; email: string; serie: string }[] = [];
-    const invalidos: number[] = [];
-
-    linhas.forEach((linha, i) => {
-      const partes = linha.split(",").map((p) => p.trim());
-      if (partes.length !== 3 || partes.some((p) => !p)) {
-        invalidos.push(i + 1);
+    text.split(/\r?\n/).forEach((bruta, i) => {
+      const texto = bruta.trim();
+      if (!texto) return;
+      const linha = i + 1;
+      const partes = texto.split(",").map((p) => p.trim());
+      if (partes.length !== 3) {
+        erros.push({ linha, texto, motivo: `Esperado 3 campos (Nome, Email, Série), encontrei ${partes.length}.` });
         return;
       }
       const [nome, email, serie] = partes;
-      validos.push({ nome, email, serie });
+      if (!nome || !email || !serie) {
+        erros.push({ linha, texto, motivo: "Tem campo vazio." });
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        erros.push({ linha, texto, motivo: `E-mail inválido: "${email}".` });
+        return;
+      }
+      const chave = email.toLowerCase();
+      if (vistos.has(chave)) {
+        erros.push({ linha, texto, motivo: `E-mail repetido (já aparece na linha ${vistos.get(chave)}).` });
+        return;
+      }
+      vistos.set(chave, linha);
+      validos.push({ linha, texto, dados: { nome, email, serie } });
     });
 
-    return { validos, invalidos };
+    return { validos, erros };
   }
 
   function parseCsvToLines(text: string): string {
@@ -230,44 +246,50 @@ export default function AlunosPage() {
 
   async function handleMassSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const { validos, invalidos } = parseMassLines(massText);
+    const { validos, erros } = parseMassLines(massText);
 
-    if (validos.length === 0) {
-      setFeedback("Nenhuma linha válida encontrada. Use o formato Nome, Email, Série.");
+    if (validos.length === 0 && erros.length === 0) {
+      setFeedback("Nenhuma linha encontrada. Use o formato Nome, Email, Série.");
       return;
     }
 
     setMassSaving(true);
     let sucesso = 0;
-    let falha = 0;
 
-    for (const a of validos) {
+    for (const v of validos) {
       try {
         const res = await fetch(`${API_URL}/alunos`, {
           method: "POST",
           headers: authHeaders(),
-          body: JSON.stringify(a),
+          body: JSON.stringify(v.dados),
         });
-        if (res.ok) sucesso++;
-        else falha++;
+        if (res.ok) {
+          sucesso++;
+        } else {
+          const corpo = await res.json().catch(() => null);
+          const msg = Array.isArray(corpo?.message) ? corpo.message.join(" ") : corpo?.message;
+          erros.push({ linha: v.linha, texto: v.texto, motivo: msg || `Erro do servidor (${res.status}).` });
+        }
       } catch {
-        falha++;
+        erros.push({ linha: v.linha, texto: v.texto, motivo: "Sem conexão com o servidor." });
       }
     }
 
     setMassSaving(false);
     await carregar();
 
+    erros.sort((x, y) => x.linha - y.linha);
+    setErrosImport(erros);
     const partes = [`${sucesso} aluno(s) cadastrado(s).`];
-    if (falha > 0) partes.push(`${falha} falharam.`);
-    if (invalidos.length > 0) {
-      partes.push(`Linha(s) ignorada(s) por formato inválido: ${invalidos.join(", ")}.`);
-    }
+    if (erros.length > 0) partes.push(`${erros.length} linha(s) com problema: veja o motivo abaixo.`);
     setFeedback(partes.join(" "));
 
-    if (falha === 0 && invalidos.length === 0) {
+    if (erros.length === 0) {
       setMassText("");
       setMassMode(false);
+    } else {
+      // Deixa no campo só as linhas com problema, para corrigir e enviar de novo.
+      setMassText(erros.map((x) => x.texto).join("\n"));
     }
   }
 
@@ -367,6 +389,20 @@ export default function AlunosPage() {
                 className="hidden"
               />
             </div>
+            {errosImport.length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                <p className="mb-1 font-semibold">
+                  {errosImport.length} linha(s) com problema. Só elas ficaram no campo abaixo: corrija e envie de novo.
+                </p>
+                <ul className="list-disc pl-4">
+                  {errosImport.map((x) => (
+                    <li key={x.linha}>
+                      <strong>Linha {x.linha}:</strong> {x.motivo} <code className="break-all">{x.texto}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <textarea
               className="h-36 rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
               placeholder={"João Pedro, joao@escola.com, 9 ano\nAna Souza, ana@escola.com, 8 ano"}
