@@ -9,6 +9,7 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AulasService } from './aulas.service';
@@ -32,8 +33,8 @@ export class AulasController {
 
   @UseGuards(AdminGuard)
   @Get()
-  findAll(@EscolaAtual() escolaId: number) {
-    return this.aulasService.findAll(escolaId);
+  findAll(@EscolaAtual() escolaId: number, @Query('todas') todas?: string) {
+    return this.aulasService.findAll(escolaId, todas === '1');
   }
 
   @UseGuards(JwtAuthGuard)

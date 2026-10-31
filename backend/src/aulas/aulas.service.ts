@@ -35,6 +35,7 @@ function emailHtml(escola: Escola, corpo: string) {
   );
 }
 
+const JANELA_PADRAO_DIAS = 28;
 const INCLUDE = { professor: true, aluno: { include: { turma: true } } } as const;
 
 @Injectable()
@@ -192,27 +193,40 @@ export class AulasService {
     return aula;
   }
 
-  findAll(escolaId: number) {
+  /** Por padrão traz as últimas 4 semanas e as futuras; `todas` traz o histórico (até 5000). */
+  findAll(escolaId: number, todas = false) {
+    const desde = new Date(Date.now() - JANELA_PADRAO_DIAS * 86_400_000);
     return this.prisma.aula.findMany({
-      where: { escolaId },
+      where: { escolaId, ...(todas ? {} : { dataHora: { gte: desde } }) },
       include: INCLUDE,
       orderBy: { dataHora: 'asc' },
+      take: 5000,
     });
   }
 
   findByAluno(alunoId: number, escolaId: number) {
     return this.prisma.aula.findMany({
-      where: { alunoId, escolaId },
+      where: {
+        alunoId,
+        escolaId,
+        dataHora: { gte: new Date(Date.now() - JANELA_PADRAO_DIAS * 86_400_000) },
+      },
       include: INCLUDE,
       orderBy: { dataHora: 'asc' },
+      take: 1000,
     });
   }
 
   findByProfessor(professorId: number, escolaId: number) {
     return this.prisma.aula.findMany({
-      where: { professorId, escolaId },
+      where: {
+        professorId,
+        escolaId,
+        dataHora: { gte: new Date(Date.now() - JANELA_PADRAO_DIAS * 86_400_000) },
+      },
       include: INCLUDE,
       orderBy: { dataHora: 'asc' },
+      take: 1000,
     });
   }
 

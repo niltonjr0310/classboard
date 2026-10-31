@@ -68,6 +68,7 @@ function rotuloDia(chave: string, hoje: string, amanha: string) {
 export default function AulasPage() {
   useSomenteAdmin();
   const [aulas, setAulas] = useState<Aula[]>([]);
+  const [todasAulas, setTodasAulas] = useState(false);
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [dataHora, setDataHora] = useState("");
@@ -101,7 +102,7 @@ export default function AulasPage() {
   async function carregar() {
     try {
       const [aulasRes, profRes, alunosRes, turmasRes] = await Promise.all([
-        fetch(`${API_URL}/aulas`, { headers: authHeaders() }),
+        fetch(`${API_URL}/aulas${todasAulas ? "?todas=1" : ""}`, { headers: authHeaders() }),
         fetch(`${API_URL}/professores`, { headers: authHeaders() }),
         fetch(`${API_URL}/alunos`, { headers: authHeaders() }),
         fetch(`${API_URL}/turmas`, { headers: authHeaders() }),
@@ -119,7 +120,8 @@ export default function AulasPage() {
 
   useEffect(() => {
     carregar();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todasAulas]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -434,6 +436,14 @@ export default function AulasPage() {
               Limpar filtros
             </button>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {todasAulas
+              ? "Mostrando todo o histórico."
+              : "Mostrando as últimas 4 semanas e as próximas aulas."}{" "}
+            <button type="button" onClick={() => setTodasAulas(!todasAulas)} className="underline">
+              {todasAulas ? "Voltar ao período recente" : "Carregar aulas antigas"}
+            </button>
+          </p>
           {dias.length === 0 && <EmptyState label="Nenhuma aula encontrada com esses filtros." />}
           {dias.map((dia, i) => (
             <section key={dia.chave}>

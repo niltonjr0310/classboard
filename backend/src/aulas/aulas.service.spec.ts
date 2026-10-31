@@ -277,4 +277,19 @@ describe('AulasService', () => {
       await expect(service.update(1, { status: 'agendada' }, 1)).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('listagem recente', () => {
+    it('por padrão traz só as últimas 4 semanas em diante; com todas=true, tudo', async () => {
+      prisma.aula.findMany.mockResolvedValue([]);
+      await service.findAll(1);
+      const w = prisma.aula.findMany.mock.calls[0][0];
+      expect(w.where.escolaId).toBe(1);
+      const dias = (Date.now() - w.where.dataHora.gte.getTime()) / 86_400_000;
+      expect(Math.round(dias)).toBe(28);
+      expect(w.take).toBe(5000);
+
+      await service.findAll(1, true);
+      expect(prisma.aula.findMany.mock.calls[1][0].where).toEqual({ escolaId: 1 });
+    });
+  });
 });
