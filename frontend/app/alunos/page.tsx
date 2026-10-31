@@ -32,6 +32,13 @@ export default function AlunosPage() {
   const [respNome, setRespNome] = useState("");
   const [respEmail, setRespEmail] = useState("");
   const [respTel, setRespTel] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [eNome, setENome] = useState("");
+  const [eEmail, setEEmail] = useState("");
+  const [eRespNome, setERespNome] = useState("");
+  const [eRespEmail, setERespEmail] = useState("");
+  const [eRespTel, setERespTel] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -143,6 +150,50 @@ export default function AlunosPage() {
     );
   }
 
+  function iniciarEdicao(a: Aluno) {
+    setEditId(a.id);
+    setENome(a.nome);
+    setEEmail(a.email);
+    setERespNome(a.responsavelNome ?? "");
+    setERespEmail(a.responsavelEmail ?? "");
+    setERespTel(a.responsavelTelefone ?? "");
+  }
+
+  async function salvarEdicao(e: React.FormEvent, a: Aluno) {
+    e.preventDefault();
+    setEditSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${a.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          nome: eNome,
+          email: eEmail,
+          responsavelNome: eRespNome.trim() || null,
+          responsavelEmail: eRespEmail.trim() || null,
+          responsavelTelefone: eRespTel.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        setFeedback(await mensagemErro(res, "Não foi possível salvar o aluno."));
+        return;
+      }
+      const novoEmailResp = eRespEmail.trim().toLowerCase();
+      const mudouResp = novoEmailResp && novoEmailResp !== (a.responsavelEmail ?? "");
+      setFeedback(
+        mudouResp
+          ? "Aluno atualizado. Pedido de autorização enviado ao responsável."
+          : "Aluno atualizado.",
+      );
+      setEditId(null);
+      await carregar();
+    } catch {
+      setFeedback("Não foi possível salvar o aluno.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function handleDelete(id: number, nomeAluno: string) {
     if (!confirm(`Excluir o aluno "${nomeAluno}"? Isso apaga também todas as aulas, provas e avisos dele. Não dá para desfazer.`)) return;
     try {
@@ -158,27 +209,58 @@ export default function AlunosPage() {
     }
   }
 
+  // "9º A", "9 a" e "9ºA" contam como a mesma turma.
+  function normalizarTurma(t: string) {
+    return t
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[º°\s]/g, "");
+  }
+
   function parseMassLines(text: string) {
-    const validos: { linha: number; texto: string; dados: { nome: string; email: string; serie: string } }[] = [];
+    type Dados = {
+      nome: string;
+      email: string;
+      serie: string;
+      turmaId?: number;
+      responsavelNome?: string;
+      responsavelEmail?: string;
+      responsavelTelefone?: string;
+    };
+    const validos: { linha: number; texto: string; dados: Dados }[] = [];
     const erros: ErroImport[] = [];
     const vistos = new Map<string, number>();
+    const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
     text.split(/\r?\n/).forEach((bruta, i) => {
       const texto = bruta.trim();
       if (!texto) return;
       const linha = i + 1;
       const partes = texto.split(",").map((p) => p.trim());
-      if (partes.length !== 3) {
-        erros.push({ linha, texto, motivo: `Esperado 3 campos (Nome, Email, Série), encontrei ${partes.length}.` });
+      if (partes.length < 3 || partes.length > 6) {
+        erros.push({
+          linha,
+          texto,
+          motivo: `Esperado de 3 a 6 campos (Nome, Email, Turma, Responsável, E-mail do responsável, Telefone), encontrei ${partes.length}.`,
+        });
         return;
       }
-      const [nome, email, serie] = partes;
-      if (!nome || !email || !serie) {
-        erros.push({ linha, texto, motivo: "Tem campo vazio." });
+      const [nome, email, turmaTxt, respNome = "", respEmail = "", respTel = ""] = partes;
+      if (!nome || !email || !turmaTxt) {
+        erros.push({ linha, texto, motivo: "Nome, e-mail e turma são obrigatórios." });
         return;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!emailOk(email)) {
         erros.push({ linha, texto, motivo: `E-mail inválido: "${email}".` });
+        return;
+      }
+      if (respEmail && !emailOk(respEmail)) {
+        erros.push({ linha, texto, motivo: `E-mail do responsável inválido: "${respEmail}".` });
+        return;
+      }
+      if ((respNome || respTel) && !respEmail) {
+        erros.push({ linha, texto, motivo: "Informe o e-mail do responsável (ele recebe o pedido de autorização)." });
         return;
       }
       const chave = email.toLowerCase();
@@ -186,8 +268,35 @@ export default function AlunosPage() {
         erros.push({ linha, texto, motivo: `E-mail repetido (já aparece na linha ${vistos.get(chave)}).` });
         return;
       }
+      let turmaId: number | undefined;
+      let serie = turmaTxt;
+      if (turmas.length > 0) {
+        const t = turmas.find((x) => normalizarTurma(x.nome) === normalizarTurma(turmaTxt));
+        if (!t) {
+          erros.push({ linha, texto, motivo: `Turma "${turmaTxt}" não está cadastrada na aba Turmas.` });
+          return;
+        }
+        turmaId = t.id;
+        serie = t.nome;
+      }
       vistos.set(chave, linha);
-      validos.push({ linha, texto, dados: { nome, email, serie } });
+      validos.push({
+        linha,
+        texto,
+        dados: {
+          nome,
+          email,
+          serie,
+          ...(turmaId ? { turmaId } : {}),
+          ...(respEmail
+            ? {
+                responsavelNome: respNome || undefined,
+                responsavelEmail: respEmail,
+                responsavelTelefone: respTel || undefined,
+              }
+            : {}),
+        },
+      });
     });
 
     return { validos, erros };
@@ -210,13 +319,13 @@ export default function AlunosPage() {
 
     return dados
       .filter((campos) => campos.length >= 3 && campos.some((c) => c))
-      .map((campos) => campos.slice(0, 3).join(", "))
+      .map((campos) => campos.slice(0, 6).join(", "))
       .join("\n");
   }
 
   function handleBaixarModelo() {
     const conteudo =
-      "Nome,Email,Série\nJoão Pedro,joao@escola.com,9 ano\nAna Souza,ana@escola.com,8 ano\n";
+      "Nome,Email,Turma,Responsável,Email do responsável,Telefone\nJoão Pedro,joao@escola.com,9º A,Maria Pedro,maria@email.com,49 99999-0000\nAna Souza,ana@escola.com,8º B,,,\n";
     const blob = new Blob(["﻿" + conteudo], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -249,7 +358,7 @@ export default function AlunosPage() {
     const { validos, erros } = parseMassLines(massText);
 
     if (validos.length === 0 && erros.length === 0) {
-      setFeedback("Nenhuma linha encontrada. Use o formato Nome, Email, Série.");
+      setFeedback("Nenhuma linha encontrada. Use o formato Nome, Email, Turma, Responsável, E-mail do responsável, Telefone.");
       return;
     }
 
@@ -363,7 +472,7 @@ export default function AlunosPage() {
           <form onSubmit={handleMassSubmit} className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Um aluno por linha, no formato: <code>Nome, Email, Série</code>
+                Um aluno por linha: <code>Nome, Email, Turma, Responsável, E-mail do responsável, Telefone</code> (os 3 últimos são opcionais; a turma tem que existir na aba Turmas)
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -405,7 +514,7 @@ export default function AlunosPage() {
             )}
             <textarea
               className="h-36 rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800"
-              placeholder={"João Pedro, joao@escola.com, 9 ano\nAna Souza, ana@escola.com, 8 ano"}
+              placeholder={"João Pedro, joao@escola.com, 9º A, Maria Pedro, maria@email.com, 49 99999-0000\nAna Souza, ana@escola.com, 8º B"}
               value={massText}
               onChange={(e) => setMassText(e.target.value)}
             />
@@ -536,7 +645,7 @@ export default function AlunosPage() {
                 {lista.map((a) => (
             <li
               key={a.id}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
             >
               <div>
                 <p className="font-medium text-slate-900 dark:text-white">{a.nome}</p>
@@ -574,12 +683,44 @@ export default function AlunosPage() {
                   </select>
                 )}
               </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => (editId === a.id ? setEditId(null) : iniciarEdicao(a))}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {editId === a.id ? "Fechar" : "Editar"}
+                </button>
               <button
                 onClick={() => handleDelete(a.id, a.nome)}
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
               >
                 Excluir
               </button>
+              </div>
+              {editId === a.id && (
+                <form onSubmit={(e) => salvarEdicao(e, a)} className="flex w-full flex-col gap-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="Nome" value={eNome} onChange={(e) => setENome(e.target.value)} required />
+                    <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="E-mail" type="email" value={eEmail} onChange={(e) => setEEmail(e.target.value)} required />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="Nome do responsável" value={eRespNome} onChange={(e) => setERespNome(e.target.value)} />
+                    <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="E-mail do responsável" type="email" value={eRespEmail} onChange={(e) => setERespEmail(e.target.value)} />
+                    <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800" placeholder="Telefone" value={eRespTel} onChange={(e) => setERespTel(e.target.value)} />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Ao cadastrar ou trocar o e-mail do responsável, ele recebe um novo pedido de autorização. A turma se muda na lista ao lado do nome.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={editSaving}
+                    className="self-start rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {editSaving ? "Salvando..." : "Salvar"}
+                  </button>
+                </form>
+              )}
             </li>
                 ))}
               </ul>
